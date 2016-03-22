@@ -1,5 +1,7 @@
 module go
 
-# package code goes here
+include("board.jl")
+include("mcts.jl")
+include("gtp.jl")
 
 end # module

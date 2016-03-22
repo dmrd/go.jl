@@ -1,11 +1,27 @@
+# This file stores game state and handles board updates
+#
+# Stores metadata about board to allow efficient incremental updates
+# Functions for use elsewhere: play_move, is_legal, and list_moves
+
+
+# TODOS
+# - Scoring
+# - GTP
+# - MCTS
+# - 
+
 import Base.getindex
 import Base.setindex!
 using DataStructures
 
+
+# Making the board size a global constant for simplicity
+const N = 19
+
 # CONVENTION: Point is (y,x)
 # TODO: Optimize size of integers
-
 typealias Point Tuple{UInt8, UInt8}
+convert{T <: Integer}(::Type{Point}, x::Tuple{T, T}) = Point(x)
 Point{T <: Integer}(a::T, b::T) = Point((a, b))
 linearindex(n::Integer, point::Point) = n * (point[2] - 1) + point[1]
 
@@ -26,38 +42,38 @@ type Group
 end
 
 type GroupSet
-    n::UInt8  # Board size
     groups::Vector{Nullable{Group}}  # linear index -> group
 end
-GroupSet(n::Int) = GroupSet(UInt8(n), fill(Nullable{Group}(), n*n))
+GroupSet() = GroupSet(fill(Nullable{Group}(), N*N))
 
 # Get the group for a given point
-getindex(groups::GroupSet, point::Point) = groups.groups[linearindex(groups.n, point)]
+getindex(groups::GroupSet, point::Point) = groups.groups[linearindex(N, point)]
 getindex(groups::GroupSet, point::Integer) = groups.groups[point]
 
-setindex!(groups::GroupSet, group::Group, point::Point) = groups[linearindex(groups.n, point)] = group
-setindex!(groups::GroupSet, group::Group, point::Integer) = groups.groups[point] = group
+setindex!(groups::GroupSet, group::Nullable{Group}, point::Point) = groups[linearindex(N, point)] = group
+setindex!(groups::GroupSet, group::Nullable{Group}, point::Integer) = groups.groups[point] = group
 
-remove_liberty(group::Group, point::Point) = setdiff!(group.liberties, point)
+remove_liberty(group::Group, point::Point) = setdiff!(group.liberties, [point])
 add_liberty(group::Group, point::Point) = push!(group.liberties, point)
 
 type Board
     current_player::Color
-    size::UInt8
     ko::Point  # 0,0 if none
     board::BoardArray
     groups::GroupSet
-    captured::UInt32  # add for white, subtract for black
-    Board(n::Integer) = new(BLACK, UInt8(n), (0,0), zeros(Color, n, n), GroupSet(n), 0)
+    captured::Int  # add for white, subtract for black
+    last_move_passed::Bool
+    nmoves::Int
+    Board() = new(BLACK, (0,0), zeros(Color, N, N), GroupSet(), 0, false, 0)
 end
 
 
-function merge_groups(groupset::GroupSet, groups::Set{Group})
+function merge_groups(groups::GroupSet, parts::Set{Group})
     # Find the largest group by # liberties
-    largest = first(groups)
+    largest = first(parts)
     msize = length(largest.liberties)
     nmembers = 0
-    for group in groups
+    for group in parts
         gsize = length(group.liberties)
         if gsize > msize
             largest = group
@@ -72,16 +88,16 @@ function merge_groups(groupset::GroupSet, groups::Set{Group})
     resize!(largest.members, nmembers)
     
     # Merge other groups in
-    for group in groups
+    for group in parts
         if group == largest
             continue
         end
         for member in group.members
             # Add member
-            merged_members[idx] = member
+            largest.members[idx] = member
             idx += 1
             # Update group lookup
-            groups.groups[member] = largest
+            groups[member] = Nullable(largest)
         end
         union!(largest.liberties, group.liberties)
     end
@@ -97,17 +113,17 @@ function remove_group(board::Board, group::Group)
     for member in group.members
         board[member] = EMPTY
         groups[member] = Nullable{Group}()
-        for neighbor in get_neighbors(board.size, member)
+        for neighbor in get_neighbors(member)
             ng = groups[neighbor]
             # Add the removed stone position as a liberty to any neighboring group
-            if !isnull(ng) && ng != group
-                add_liberty(ng, member)
+            if !isnull(ng)
+                ng = get(ng)
+                ng != group && add_liberty(ng, member)
             end
         end
     end
 end
 
-#function add_stone(board::Board, point::Point)
 function add_stone(board::Board, point::Point)
     groups = board.groups
     color = board.current_player
@@ -115,7 +131,7 @@ function add_stone(board::Board, point::Point)
         @assert false && "Point already in a group"
     end
     board[point] = color
-    neighbors = get_neighbors(groups.n, point)
+    neighbors = get_neighbors(point)
 
     allies = Set{Group}()
     foes = Set{Group}()
@@ -123,7 +139,7 @@ function add_stone(board::Board, point::Point)
     # Create new group
     group = Group(color)
 
-    groups[point] = group
+    groups[point] = Nullable(group)
 
     push!(group.members, point)
 
@@ -136,7 +152,7 @@ function add_stone(board::Board, point::Point)
         end
         ng = get(maybe_ng)
         if ng.color == color
-            push!(ally, ng)
+            push!(allies, ng)
         elseif ng.color != color
             push!(foes, ng)
         end
@@ -145,30 +161,32 @@ function add_stone(board::Board, point::Point)
     # Merge allies together
     if length(allies) > 0
         push!(allies, group)
-        group = merge_groups(groupset, allies)
+        group = merge_groups(groups, allies)
     end
 
     for foe in foes
         remove_liberty(foe, point)
-        if length(foe.libertie) == 0
-            remove_group(foe)
+        if length(foe.liberties) == 0
+            remove_group(board, foe)
         end
     end
 
     group
 end
 
-function onboard(n::Integer, point::Point)
-    point[1] >= 1 && point[1] <= n &&
-    point[2] >= 1 && point[2] <= n
+function onboard(point::Point)
+    point[1] >= 1 && point[1] <= N &&
+    point[2] >= 1 && point[2] <= N
 end
 
-function get_neighbors(n::Integer, point::Point)
+function get_neighbors(point::Point)
     x = point[1]
     y = point[2]
     result = Vector{Point}()
     for neighbor in [(UInt8(x - 1), y), (UInt8(x + 1), y), (x, UInt8(y - 1)), (x, UInt8(y + 1))]
-        onboard(n, neighbor) && push!(result, neighbor)
+        if onboard(neighbor)
+            push!(result, neighbor)
+        end
     end
     result
 end
@@ -186,7 +204,7 @@ setindex!(b::Board, c::Color, p::Point) = b.board[p] = c
 #   b. Any neighbor group is same color and has > 1 libery
 #   c. Any neighbor group is opponent color and only has 1 liberty (now captured)
 function is_suicide(board::Board, point::Point)
-    neighbors = get_neighbors(board.size, point)
+    neighbors = get_neighbors(point)
     # Any neighbor is free
     for neighbor in neighbors
         if board[neighbor] == EMPTY
@@ -195,10 +213,16 @@ function is_suicide(board::Board, point::Point)
     end
 
     for neighbor in neighbors
-        if board[neighbor] == board.current_player && board.groups[neighbor].nliberties > 1
+        color = board[neighbor]
+        if color == EMPTY
+            continue
+        end
+        ng = get(board.groups[neighbor])
+        nliberties = length(ng.liberties)
+        if color == board.current_player && nliberties > 1
             # Connecting to group that has other liberties
             return false
-        elseif board[neighbor] == -board.current_player && board.groups[neighbor].nliberties == 1
+        elseif color == -board.current_player && nliberties == 1
             # Captures opposing group
             return false
         end
@@ -211,20 +235,17 @@ end
 # 3. Is not a suicide
 function is_legal(board::Board, point::Point)
     # Move must be on board
-    if !onboard(board.size, point)
-        println("a")
+    if !onboard(point)
         return false
     end
 
     # Position must be empty
     if board[point] != EMPTY
-        println("b")
         return false
     end
 
     # Cannot violate Ko rule
     if board.ko == point
-        println("d")
         return false
     end
 
@@ -233,9 +254,19 @@ function is_legal(board::Board, point::Point)
 end
 
 function play_move(board::Board, point::Point)
+    board.nmoves += 1
+    if point == PASS_MOVE
+        if board.last_move_passed
+            # Game technically ends
+        end
+        board.last_move_passed = true
+        return board
+    end
     # Check legality
     if !is_legal(board, point)
         # Should probably make this not an assert
+        print(board)
+        println(point)
         @assert false && "Illegal move"
     end
 
@@ -246,6 +277,25 @@ function play_move(board::Board, point::Point)
     board
 end
 
+# Returns a list of moves (length >= 1 because of PASS)
+function legal_moves(board::Board)
+    moves = Vector{Point}()
+    push!(moves, PASS_MOVE)
+    for col in 1:N
+        for row in 1:N
+            point = Point(row, col)
+            if is_legal(board, point)
+                push!(moves, point)
+            end
+        end
+    end
+    moves
+end
+
+# Chinese scoring: territory + number of stones left on board
+function score(board::Board)
+
+end
 
 ##################
 # Representation #
@@ -259,9 +309,23 @@ const ascii = Dict(
 function board_repr(board::Board)
     rows = Vector{ASCIIString}()
     mapper = char -> ascii[char]
-    for row in 1:board.size
+    for row in 1:N
         row_repr = join(map(mapper, board.board[row, :]), "")
         push!(rows, row_repr)
     end
     join(rows, "\n")
 end
+
+print(board::Board) = println(board_repr(board))
+
+
+a = Board()
+play_move(a, Point(2,2))
+play_move(a, Point(2,1))
+play_move(a, Point(5,5))
+play_move(a, Point(2,3))
+play_move(a, Point(5,6))
+play_move(a, Point(1,2))
+play_move(a, Point(4,6))
+play_move(a, Point(3,2))
+a
