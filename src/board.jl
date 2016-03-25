@@ -8,7 +8,10 @@
 # - Scoring
 # - GTP
 # - MCTS
-# - 
+#
+# Optimizations
+# - Use linear index everywhere
+# - Optimize memory size (int sizes)
 
 import Base.getindex
 import Base.setindex!
@@ -16,14 +19,14 @@ using DataStructures
 
 
 # Making the board size a global constant for simplicity
-const N = 19
+const N = 9
 
 # CONVENTION: Point is (y,x)
-# TODO: Optimize size of integers
 typealias Point Tuple{UInt8, UInt8}
 convert{T <: Integer}(::Type{Point}, x::Tuple{T, T}) = Point(x)
 Point{T <: Integer}(a::T, b::T) = Point((a, b))
-linearindex(n::Integer, point::Point) = n * (point[2] - 1) + point[1]
+# Memory orded - n(x-1) + y
+linearindex{T<:Integer}(point::Tuple{T,T}) = N * (point[2] - 1) + point[1]
 
 typealias Color Int8
 typealias BoardArray Array{Color, 2}
@@ -47,10 +50,10 @@ end
 GroupSet() = GroupSet(fill(Nullable{Group}(), N*N))
 
 # Get the group for a given point
-getindex(groups::GroupSet, point::Point) = groups.groups[linearindex(N, point)]
+getindex(groups::GroupSet, point::Point) = groups.groups[linearindex(point)]
 getindex(groups::GroupSet, point::Integer) = groups.groups[point]
 
-setindex!(groups::GroupSet, group::Nullable{Group}, point::Point) = groups[linearindex(N, point)] = group
+setindex!(groups::GroupSet, group::Nullable{Group}, point::Point) = groups[linearindex(point)] = group
 setindex!(groups::GroupSet, group::Nullable{Group}, point::Integer) = groups.groups[point] = group
 
 remove_liberty(group::Group, point::Point) = setdiff!(group.liberties, [point])
@@ -67,6 +70,63 @@ type Board
     Board() = new(BLACK, (0,0), zeros(Color, N, N), GroupSet(), 0, false, 0)
 end
 
+# make IsSensible function to filter out playing inside own territory
+
+## This is a work in progress
+# Calculate exact score for chinese rules
+function calculate_score(board::Board)
+    score = sum(board.board) # Score stone counts
+    Q = Vector{Point}()
+
+    # Flood fill empty territory to determine who owns it
+    queued = BitArray(N,N)
+    fill!(queued, false)
+    for x = 1:N
+        for y = 1:N
+            if board.board[y,x] == EMPTY && !queued[y,x]
+                empty!(Q)  # Want to reuse same memory, but clear out
+                color = EMPTY # color of surrounding stones
+                area = 1  # Size of connected component
+                done = false  # have found both colors
+
+                push!(Q, (y,x))
+                queued[linearindex((y,x))] = true
+                while length(Q) > 0
+                    cur = pop!(Q)
+                    for neighbor in get_neighbors(cur)
+                        val = board.board[neighbor]
+                        # if a stone
+                        if val != EMPTY
+                            # If we have seen opposite color stone
+                            if color == -val
+                                done = true
+                            else
+                                color = val
+                            end
+                        elseif !queued[linearindex(neighbor)]
+                            area += 1
+                            push!(Q, neighbor)
+                            queued[linearindex(neighbor)] = true
+                        end
+                    end
+                end
+                # if done, then encountered both black & white => not owned
+                # else owned by value in `color`
+                if done
+                    break
+                else
+                    score += color * area
+                end
+            end
+        end
+    end
+    return score
+end
+
+# Fast score approximation
+function simple_score(board::Board)
+    score = sum(board.board)
+end
 
 function merge_groups(groups::GroupSet, parts::Set{Group})
     # Find the largest group by # liberties
@@ -179,6 +239,7 @@ function onboard(point::Point)
     point[2] >= 1 && point[2] <= N
 end
 
+# TODO: Implement as an iterator
 function get_neighbors(point::Point)
     x = point[1]
     y = point[2]
@@ -319,13 +380,13 @@ end
 print(board::Board) = println(board_repr(board))
 
 
-a = Board()
-play_move(a, Point(2,2))
-play_move(a, Point(2,1))
-play_move(a, Point(5,5))
-play_move(a, Point(2,3))
-play_move(a, Point(5,6))
-play_move(a, Point(1,2))
-play_move(a, Point(4,6))
-play_move(a, Point(3,2))
-a
+#a = Board()
+#play_move(a, Point(2,2))
+#play_move(a, Point(2,1))
+#play_move(a, Point(5,5))
+#play_move(a, Point(2,3))
+#play_move(a, Point(5,6))
+#play_move(a, Point(1,2))
+#play_move(a, Point(4,6))
+#play_move(a, Point(3,2))
+#a
