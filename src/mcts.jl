@@ -1,3 +1,10 @@
+# TODO: Make this not play in eyes
+
+function genmove(board::Board)
+    candidates = legal_moves(board)
+    rand(candidates)
+end
+
 function play_out(board::Board, num_rounds::Integer)
     forced_pass = false
     for i = 1:num_rounds

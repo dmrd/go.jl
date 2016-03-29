@@ -19,13 +19,13 @@ using DataStructures
 
 
 # Making the board size a global constant for simplicity
-const N = 9
+const N = 7
 
 # CONVENTION: Point is (y,x)
 typealias Point Tuple{UInt8, UInt8}
 convert{T <: Integer}(::Type{Point}, x::Tuple{T, T}) = Point(x)
 Point{T <: Integer}(a::T, b::T) = Point((a, b))
-# Memory orded - n(x-1) + y
+# Memory ordered - n(x-1) + y
 linearindex{T<:Integer}(point::Tuple{T,T}) = N * (point[2] - 1) + point[1]
 
 typealias Color Int8
@@ -33,7 +33,25 @@ typealias BoardArray Array{Color, 2}
 const EMPTY = Color(0)
 const WHITE = Color(-1)
 const BLACK = Color(1)
-const PASS_MOVE = (0,0)
+const PASS_MOVE = Point(0,0)
+
+
+const COLSTR = "ABCDEFGHJKLMNOPQRST"
+function str_coord(point::Point)
+    if point == PASS_MOVE
+        return "pass"
+    else
+         return @sprintf("%c%d", COLSTR[point[2]], point[1])
+    end
+end
+
+function parse_coord(str::AbstractString)
+    if str == "pass"
+        return PASS_MOVE
+    end
+    letter = searchindex(COLSTR, uppercase(str[1]))
+    return Point(parse(Int, str[2:end]), letter)
+end
 
 
 # TODO: PERFORMANCE Benchmark intsets versus Vector{Int}
@@ -60,15 +78,18 @@ remove_liberty(group::Group, point::Point) = setdiff!(group.liberties, [point])
 add_liberty(group::Group, point::Point) = push!(group.liberties, point)
 
 type Board
-    current_player::Color
     ko::Point  # 0,0 if none
     board::BoardArray
     groups::GroupSet
     captured::Int  # add for white, subtract for black
     last_move_passed::Bool
-    nmoves::Int
-    Board() = new(BLACK, (0,0), zeros(Color, N, N), GroupSet(), 0, false, 0)
+    cmove::Int
+    komi::Float64
+    Board() = new((0,0), zeros(Color, N, N), GroupSet(), 0, false, 1, 6.5)
 end
+
+current_player(current_move::Integer) = current_move % 2 == 0 ? WHITE : BLACK
+current_player(board::Board) = current_player(board.cmove)
 
 # make IsSensible function to filter out playing inside own territory
 
@@ -120,12 +141,7 @@ function calculate_score(board::Board)
             end
         end
     end
-    return score
-end
-
-# Fast score approximation
-function simple_score(board::Board)
-    score = sum(board.board)
+    return score - board.komi
 end
 
 function merge_groups(groups::GroupSet, parts::Set{Group})
@@ -186,7 +202,7 @@ end
 
 function add_stone(board::Board, point::Point)
     groups = board.groups
-    color = board.current_player
+    color = current_player(board)
     if !isnull(groups[point])
         @assert false && "Point already in a group"
     end
@@ -280,10 +296,11 @@ function is_suicide(board::Board, point::Point)
         end
         ng = get(board.groups[neighbor])
         nliberties = length(ng.liberties)
-        if color == board.current_player && nliberties > 1
+        cplayer = current_player(board)
+        if color == cplayer && nliberties > 1
             # Connecting to group that has other liberties
             return false
-        elseif color == -board.current_player && nliberties == 1
+        elseif color == -cplayer && nliberties == 1
             # Captures opposing group
             return false
         end
@@ -315,26 +332,28 @@ function is_legal(board::Board, point::Point)
 end
 
 function play_move(board::Board, point::Point)
-    board.nmoves += 1
     if point == PASS_MOVE
+        # TODO: MAKE IT HANDLE COLORS AFTER PASS MOVE PROPERLY
         if board.last_move_passed
             # Game technically ends
         end
         board.last_move_passed = true
         return board
-    end
-    # Check legality
-    if !is_legal(board, point)
-        # Should probably make this not an assert
-        print(board)
-        println(point)
-        @assert false && "Illegal move"
-    end
+    else
+        # Check legality
+        if !is_legal(board, point)
+            # Should probably make this not an assert
+            println(STDERR, str_coord(point))
+            print_pos(board)
+            warn(board)
+            @assert false && "Illegal move"
+        end
 
-    board.ko = PASS_MOVE
+        board.ko = PASS_MOVE
 
-    add_stone(board, point)
-    board.current_player = -board.current_player
+        add_stone(board, point)
+    end
+    board.cmove += 1
     board
 end
 
@@ -353,11 +372,6 @@ function legal_moves(board::Board)
     moves
 end
 
-# Chinese scoring: territory + number of stones left on board
-function score(board::Board)
-
-end
-
 ##################
 # Representation #
 ##################A
@@ -372,10 +386,13 @@ function board_repr(board::Board)
     mapper = char -> ascii[char]
     for row in 1:N
         row_repr = join(map(mapper, board.board[row, :]), "")
-        push!(rows, row_repr)
+        push!(rows, string(repr(row), " ", row_repr))
     end
-    join(rows, "\n")
+    push!(rows, string("  ", COLSTR[1:N]))
+    join(reverse(rows), "\n")
 end
+
+print_pos(board::Board; output=STDERR) = println(output, board_repr(board))
 
 print(board::Board) = println(board_repr(board))
 
