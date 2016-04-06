@@ -200,9 +200,8 @@ function remove_group(board::Board, group::Group)
     end
 end
 
-function add_stone(board::Board, point::Point)
+function add_stone(board::Board, point::Point, color::Color)
     groups = board.groups
-    color = current_player(board)
     if !isnull(groups[point])
         @assert false && "Point already in a group"
     end
@@ -280,7 +279,7 @@ setindex!(b::Board, c::Color, p::Point) = b.board[p] = c
 #   a. Any neighbor is empty
 #   b. Any neighbor group is same color and has > 1 libery
 #   c. Any neighbor group is opponent color and only has 1 liberty (now captured)
-function is_suicide(board::Board, point::Point)
+function is_suicide(board::Board, point::Point, cplayer::Color)
     neighbors = get_neighbors(point)
     # Any neighbor is free
     for neighbor in neighbors
@@ -292,11 +291,10 @@ function is_suicide(board::Board, point::Point)
     for neighbor in neighbors
         color = board[neighbor]
         if color == EMPTY
-            continue
+            return false
         end
         ng = get(board.groups[neighbor])
         nliberties = length(ng.liberties)
-        cplayer = current_player(board)
         if color == cplayer && nliberties > 1
             # Connecting to group that has other liberties
             return false
@@ -311,7 +309,7 @@ end
 # 1. Unoccupied
 # 2. Not illegal due to Ko rule
 # 3. Is not a suicide
-function is_legal(board::Board, point::Point)
+function is_legal(board::Board, point::Point, color::Color)
     # Move must be on board
     if !onboard(point)
         return false
@@ -328,10 +326,12 @@ function is_legal(board::Board, point::Point)
     end
 
     # Finally, check if it is a suicide
-    return !is_suicide(board, point)
+    return !is_suicide(board, point, color)
 end
 
 function play_move(board::Board, point::Point)
+    color = current_player(board)
+    board.cmove += 1
     if point == PASS_MOVE
         # TODO: MAKE IT HANDLE COLORS AFTER PASS MOVE PROPERLY
         if board.last_move_passed
@@ -341,7 +341,7 @@ function play_move(board::Board, point::Point)
         return board
     else
         # Check legality
-        if !is_legal(board, point)
+        if !is_legal(board, point, color)
             # Should probably make this not an assert
             println(STDERR, str_coord(point))
             print_pos(board)
@@ -351,23 +351,25 @@ function play_move(board::Board, point::Point)
 
         board.ko = PASS_MOVE
 
-        add_stone(board, point)
+        add_stone(board, point, color)
     end
-    board.cmove += 1
     board
 end
 
 # Returns a list of moves (length >= 1 because of PASS)
 function legal_moves(board::Board)
     moves = Vector{Point}()
-    push!(moves, PASS_MOVE)
+    #push!(moves, PASS_MOVE)
     for col in 1:N
         for row in 1:N
             point = Point(row, col)
-            if is_legal(board, point)
+            if is_legal(board, point, current_player(board))
                 push!(moves, point)
             end
         end
+    end
+    if length(moves) == 0
+        return [PASS_MOVE]
     end
     moves
 end
@@ -392,7 +394,28 @@ function board_repr(board::Board)
     join(reverse(rows), "\n")
 end
 
+# Print liberties of each stone
+function liberty_counts(board::Board)
+    rows = Vector{ASCIIString}()
+    mapped = []
+    for space in board.groups.groups
+        if isnull(space)
+            push!(mapped, ".")
+        else
+            push!(mapped, base(62, length(get(space).liberties)))
+        end
+    end
+    reshaped = reshape(mapped, (N, N))
+    for row in 1:N
+        row_repr = join(reshaped[row, :], "")
+        push!(rows, string(repr(row), " ", row_repr))
+    end
+    push!(rows, string("  ", COLSTR[1:N]))
+    join(reverse(rows), "\n")
+end
+
 print_pos(board::Board; output=STDERR) = println(output, board_repr(board))
+print_liberties(board::Board; output=STDERR) = println(output, liberty_counts(board))
 
 print(board::Board) = println(board_repr(board))
 

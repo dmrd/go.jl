@@ -42,7 +42,11 @@ function gtp()
             # Set komi
             board.komi = parse(Float64, command[2])
         elseif command[1] == "play"
-            move = parse_coord(command[3])
+            if length(command) == 2
+                move = parse_coord(command[2])
+            else 
+                move = parse_coord(command[3])
+            end
             println(f, command)
             println(f, move)
             play_move(board, move)
@@ -69,7 +73,9 @@ function gtp()
             ret = "Go bot written in Julia"
         elseif command[1] == "tsdebug"
             print_pos(board, output=STDOUT)
-            # TODO: Print stats
+        elseif command[1] == "ldebug"
+            # Print liberties of each stone
+            print_liberties(board, output=STDOUT)
         elseif command[1] == "list_commands"
             ret = join(known_commands, "\n")
         elseif command[1] == "known_command"
