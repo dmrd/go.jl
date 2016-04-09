@@ -19,7 +19,7 @@ using DataStructures
 
 
 # Making the board size a global constant for simplicity
-const N = 7
+const N = 9
 
 # CONVENTION: Point is (y,x)
 typealias Point Tuple{UInt8, UInt8}
@@ -82,10 +82,10 @@ type Board
     board::BoardArray
     groups::GroupSet
     captured::Int  # add for white, subtract for black
-    last_move_passed::Bool
+    last_move::Point  # init to (200,200) as an impossible move
     cmove::Int
     komi::Float64
-    Board() = new((0,0), zeros(Color, N, N), GroupSet(), 0, false, 1, 6.5)
+    Board() = new((0,0), zeros(Color, N, N), GroupSet(), 0, Point(200,200), 1, 6.5)
 end
 
 current_player(current_move::Integer) = current_move % 2 == 0 ? WHITE : BLACK
@@ -333,12 +333,9 @@ function play_move(board::Board, point::Point)
     color = current_player(board)
     board.cmove += 1
     if point == PASS_MOVE
-        # TODO: MAKE IT HANDLE COLORS AFTER PASS MOVE PROPERLY
-        if board.last_move_passed
-            # Game technically ends
+        if board.last_move == PASS_MOVE
+            # TODO: Game technically ends
         end
-        board.last_move_passed = true
-        return board
     else
         # Check legality
         if !is_legal(board, point, color)
@@ -350,9 +347,9 @@ function play_move(board::Board, point::Point)
         end
 
         board.ko = PASS_MOVE
-
         add_stone(board, point, color)
     end
+    board.last_move = point
     board
 end
 
@@ -388,9 +385,9 @@ function board_repr(board::Board)
     mapper = char -> ascii[char]
     for row in 1:N
         row_repr = join(map(mapper, board.board[row, :]), "")
-        push!(rows, string(repr(row), " ", row_repr))
+        push!(rows, string(rpad(repr(row), 3, " "), row_repr))
     end
-    push!(rows, string("  ", COLSTR[1:N]))
+    push!(rows, string("   ", COLSTR[1:N]))
     join(reverse(rows), "\n")
 end
 
@@ -408,9 +405,9 @@ function liberty_counts(board::Board)
     reshaped = reshape(mapped, (N, N))
     for row in 1:N
         row_repr = join(reshaped[row, :], "")
-        push!(rows, string(repr(row), " ", row_repr))
+        push!(rows, string(rpad(repr(row), 3, " "), row_repr))
     end
-    push!(rows, string("  ", COLSTR[1:N]))
+    push!(rows, string("   ", COLSTR[1:N]))
     join(reverse(rows), "\n")
 end
 
