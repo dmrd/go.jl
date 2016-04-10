@@ -5,8 +5,6 @@
 
 
 # TODOS
-# - Scoring
-# - GTP
 # - MCTS
 #
 # Optimizations
@@ -15,6 +13,7 @@
 
 import Base.getindex
 import Base.setindex!
+import Base.zeros
 using DataStructures
 
 
@@ -63,16 +62,32 @@ type Group
 end
 
 type GroupSet
-    groups::Vector{Nullable{Group}}  # linear index -> group
+    groups::Vector{Group}  # linear index -> group
 end
-GroupSet() = GroupSet(fill(Nullable{Group}(), N*N))
+function GroupSet()
+    gs = Vector{Group}(N*N)
+    i = 1
+    for x in 1:N
+        for y in 1:N
+            point = Point(y,x)
+            group = Group(EMPTY)
+            push!(group.members, point)
+            for neighbor in get_neighbors(point)
+                push!(group.liberties, neighbor)
+            end
+            gs[i] = group
+            i += 1
+        end
+    end
+    GroupSet(gs)
+end
 
 # Get the group for a given point
 getindex(groups::GroupSet, point::Point) = groups.groups[linearindex(point)]
 getindex(groups::GroupSet, point::Integer) = groups.groups[point]
 
-setindex!(groups::GroupSet, group::Nullable{Group}, point::Point) = groups[linearindex(point)] = group
-setindex!(groups::GroupSet, group::Nullable{Group}, point::Integer) = groups.groups[point] = group
+setindex!(groups::GroupSet, group::Group, point::Point) = groups[linearindex(point)] = group
+setindex!(groups::GroupSet, group::Group, point::Integer) = groups.groups[point] = group
 
 remove_liberty(group::Group, point::Point) = setdiff!(group.liberties, [point])
 add_liberty(group::Group, point::Point) = push!(group.liberties, point)
@@ -80,12 +95,14 @@ add_liberty(group::Group, point::Point) = push!(group.liberties, point)
 type Board
     ko::Point  # 0,0 if none
     board::BoardArray
+    order::Array{Int, 2}  # Move # when move was played
     groups::GroupSet
     captured::Int  # add for white, subtract for black
     last_move::Point  # init to (200,200) as an impossible move
     cmove::Int
     komi::Float64
-    Board() = new((0,0), zeros(Color, N, N), GroupSet(), 0, Point(200,200), 1, 6.5)
+    Board() = new((0,0), zeros(Color, N, N), zeros(Int, N, N),
+                  GroupSet(), 0, Point(200,200), 1, 6.5)
 end
 
 current_player(current_move::Integer) = current_move % 2 == 0 ? WHITE : BLACK
@@ -162,7 +179,7 @@ function merge_groups(groups::GroupSet, parts::Set{Group})
     # Grow members vector to avoid repeated resizing
     idx = length(largest.members) + 1
     resize!(largest.members, nmembers)
-    
+
     # Merge other groups in
     for group in parts
         if group == largest
@@ -173,7 +190,7 @@ function merge_groups(groups::GroupSet, parts::Set{Group})
             largest.members[idx] = member
             idx += 1
             # Update group lookup
-            groups[member] = Nullable(largest)
+            groups[member] = largest
         end
         union!(largest.liberties, group.liberties)
     end
@@ -184,27 +201,38 @@ function merge_groups(groups::GroupSet, parts::Set{Group})
     largest
 end
 
+function new_group_at_point(board::Board, point::Point, color::Color)
+    group = Group(color)
+    push!(group.members, point)
+    for neighbor in get_neighbors(point)
+        if board.board[neighbor] == EMPTY
+            push!(group.liberties, neighbor)
+        end
+    end
+    board.groups[point] = group
+    group
+end
+
 function remove_group(board::Board, group::Group)
     groups = board.groups
+    # Clear out and add to neighboring groups as liberties
     for member in group.members
         board[member] = EMPTY
-        groups[member] = Nullable{Group}()
         for neighbor in get_neighbors(member)
             ng = groups[neighbor]
             # Add the removed stone position as a liberty to any neighboring group
-            if !isnull(ng)
-                ng = get(ng)
-                ng != group && add_liberty(ng, member)
-            end
+            ng != group && add_liberty(ng, member)
         end
+    end
+
+    # Now create empty groups in the old locations
+    for member in group.members
+        new_group_at_point(board, member, EMPTY)
     end
 end
 
 function add_stone(board::Board, point::Point, color::Color)
     groups = board.groups
-    if !isnull(groups[point])
-        @assert false && "Point already in a group"
-    end
     board[point] = color
     neighbors = get_neighbors(point)
 
@@ -212,20 +240,11 @@ function add_stone(board::Board, point::Point, color::Color)
     foes = Set{Group}()
 
     # Create new group
-    group = Group(color)
-
-    groups[point] = Nullable(group)
-
-    push!(group.members, point)
+    group = new_group_at_point(board, point, color)
 
     # Group neighbors by type
     for neighbor in neighbors
-        maybe_ng = groups[neighbor]
-        if isnull(maybe_ng)
-            push!(group.liberties, neighbor)
-            continue
-        end
-        ng = get(maybe_ng)
+        ng = groups[neighbor]
         if ng.color == color
             push!(allies, ng)
         elseif ng.color != color
@@ -293,7 +312,7 @@ function is_suicide(board::Board, point::Point, cplayer::Color)
         if color == EMPTY
             return false
         end
-        ng = get(board.groups[neighbor])
+        ng = board.groups[neighbor]
         nliberties = length(ng.liberties)
         if color == cplayer && nliberties > 1
             # Connecting to group that has other liberties
@@ -347,6 +366,7 @@ function play_move(board::Board, point::Point)
         end
 
         board.ko = PASS_MOVE
+        board.order[linearindex(point)] = board.cmove - 1
         add_stone(board, point, color)
     end
     board.last_move = point
@@ -396,7 +416,7 @@ function liberty_counts(board::Board)
     rows = Vector{ASCIIString}()
     mapped = []
     for space in board.groups.groups
-        if isnull(space)
+        if space.color == EMPTY
             push!(mapped, ".")
         else
             push!(mapped, base(62, length(get(space).liberties)))
