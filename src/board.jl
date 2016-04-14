@@ -231,31 +231,39 @@ function remove_group(board::Board, group::Group)
     end
 end
 
+function get_friend_foe(board::Board, point::Point, color::Color)
+    friends = Set{Group}()
+    foes = Set{Group}()
+    empty = Set{Group}()
+    # Group neighbors by type
+    for neighbor in get_neighbors(point)
+        ng = board.groups[neighbor]
+        if ng.color == color
+            push!(friends, ng)
+        elseif ng.color == -color
+            push!(foes, ng)
+        elseif ng.color == EMPTY
+            push!(empty, ng)
+        end
+    end
+    (friends, foes, empty)
+end
+
 function add_stone(board::Board, point::Point, color::Color)
     groups = board.groups
     board[point] = color
-    neighbors = get_neighbors(point)
 
-    allies = Set{Group}()
-    foes = Set{Group}()
+    # Change group color at point
+    group = board.groups[point]
+    @assert length(group.members) == 1 && group.color == EMPTY
+    group.color = color
 
-    # Create new group
-    group = new_group_at_point(board, point, color)
+    (friends, foes, empties) = get_friend_foe(board, point, color)
 
-    # Group neighbors by type
-    for neighbor in neighbors
-        ng = groups[neighbor]
-        if ng.color == color
-            push!(allies, ng)
-        elseif ng.color != color
-            push!(foes, ng)
-        end
-    end
-
-    # Merge allies together
-    if length(allies) > 0
-        push!(allies, group)
-        group = merge_groups(groups, allies)
+    # Merge friends together
+    if length(friends) > 0
+        push!(friends, group)
+        group = merge_groups(groups, friends)
     end
 
     for foe in foes
@@ -263,6 +271,10 @@ function add_stone(board::Board, point::Point, color::Color)
         if length(foe.liberties) == 0
             remove_group(board, foe)
         end
+    end
+
+    for empty in empties
+        remove_liberty(empty, point)
     end
 
     group
@@ -287,7 +299,7 @@ function get_neighbors(point::Point)
 end
 
 getindex(b::BoardArray, p::Point) = b[p...]
-setindex!(b::BoardArray, c::Color, p::Point) = b[p...] = c
+setindex!{T}(b::Array{T, 2}, c::T, p::Point) = b[p...] = c
 
 # TODO: Are multiple redirections optimized out?
 # Same for GroupSet
@@ -419,7 +431,7 @@ function liberty_counts(board::Board)
         if space.color == EMPTY
             push!(mapped, ".")
         else
-            push!(mapped, base(62, length(get(space).liberties)))
+            push!(mapped, base(62, length(space.liberties)))
         end
     end
     reshaped = reshape(mapped, (N, N))

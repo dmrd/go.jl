@@ -15,7 +15,7 @@ function SGF(filename::AbstractString)
     lines = readall(f)
 
     # Check if there is a handicap - we want to ignore these
-    handicap_regex = r"[W|B]T\[(|..)\]"
+    handicap_regex = r"A[W|B]\[(|..)\]"
     if match(handicap_regex, lines) != nothing
         println("contains handicaps: $(filename)")
         return nothing
@@ -26,11 +26,35 @@ function SGF(filename::AbstractString)
     sgf
 end
 
+# Utility function
+# Use to filter out games between low ranked players
+function players_over_rating(filename::AbstractString, minrating::Int)
+    open(filename) do f
+        lines = readall(f)
+    end
+    wrating_regex = r"WR\[[0-9]{4}\]"
+    brating_regex = r"BR\[[0-9]{4}\]"
+    mw = match(wrating_regex, lines)
+    mb = match(brating_regex, lines)
+    if mw == nothing || mb == nothing
+        return false
+    end
+    if parse(Int, mw.captures[1]) < minrating || parse(Int, mb.captures[1]) < minrating
+        return false
+    end
+    return true
+end
+
+function find_sgf(folder::AbstractString)
+    files = Vector{ByteString}
+    folders = Vector{ByteString}
+end
+
+
 function get_next_move(sgf::SGF)
     regex = r"(W|B)\[(|..)\]"  # W[xx] / B[xx] / W[] / B[]
     move = nothing
     while move == nothing
-        println(sgf.cindex)
         if sgf.cindex > length(sgf.parts)
             sgf.finished = true
             return nothing
@@ -42,7 +66,6 @@ function get_next_move(sgf::SGF)
             # Try the next one if this move has no matches
             continue
         else
-            println(part)
             color = m.captures[1] == "B" ? BLACK : WHITE
             coords = m.captures[2]
             if color != sgf.cplayer
