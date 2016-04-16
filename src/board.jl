@@ -448,14 +448,6 @@ print_liberties(board::Board; output=STDERR) = println(output, liberty_counts(bo
 
 print(board::Board) = println(board_repr(board))
 
-
-#a = Board()
-#play_move(a, Point(2,2))
-#play_move(a, Point(2,1))
-#play_move(a, Point(5,5))
-#play_move(a, Point(2,3))
-#play_move(a, Point(5,6))
-#play_move(a, Point(1,2))
-#play_move(a, Point(4,6))
-#play_move(a, Point(3,2))
-#a
+function Base.show(io::IO, board::Board)
+    Base.print(io, board_repr(board))
+end
