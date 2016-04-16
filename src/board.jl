@@ -21,11 +21,16 @@ using DataStructures
 const N = 9
 
 # CONVENTION: Point is (y,x)
+# ^ I'm not sure if this was a good idea now.  May change.
 typealias Point Tuple{UInt8, UInt8}
 convert{T <: Integer}(::Type{Point}, x::Tuple{T, T}) = Point(x)
 Point{T <: Integer}(a::T, b::T) = Point((a, b))
 # Memory ordered - n(x-1) + y
 linearindex{T<:Integer}(point::Tuple{T,T}) = N * (point[2] - 1) + point[1]
+function pointindex{T<:Integer}(index::T)
+    y, x = divrem(index, N)
+    Point(x, y + 1)
+end
 
 typealias Color Int8
 typealias BoardArray Array{Color, 2}
