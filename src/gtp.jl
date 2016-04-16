@@ -3,7 +3,7 @@
 
 
 # Based on implementation from Michi
-function gtp()
+function gtp(policy::Policy)
     known_commands = ["boardsize", "clear_board", "komi", "play", "genmove",
                       "final_score", "quit", "name", "version", "known_command",
                       "list_commands", "protocol_version", "tsdebug"]
@@ -52,7 +52,7 @@ function gtp()
             play_move(board, move)
             println(f, "played move")
         elseif command[1] == "genmove"
-            move = genmove(board)
+            move = choose_move(board, policy)
             play_move(board, move)
             ret = str_coord(move)
             println(f, ret)
