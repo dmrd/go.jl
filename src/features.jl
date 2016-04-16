@@ -1,7 +1,11 @@
 ## Feature extraction
 # All features calculated relative to current player to move
 
-function one_hot(counts::Array{Int, 2}; maxval=8)
+"""
+Discretize a 2D integer matrix into `maxval` binary layers
+Layers correspond to == 1, == 2, ... == (maxval - 1), >= maxval
+"""
+function discretize(counts::Array{Int, 2}; maxval=8)
     out = BitArray(N, N, maxval)
     for i in 1:(maxval-1)
         out[:, :, i] = counts == i
@@ -29,7 +33,7 @@ function zeros(board::Board)
 end
 
 function turns_since(board::Board; maxval=8)
-    one_hot(board.cmove - board.order, maxval=maxval)
+    discretize(board.cmove - board.order, maxval=maxval)
 end
 
 function liberties(board::Board; maxval=8)
@@ -41,7 +45,7 @@ function liberties(board::Board; maxval=8)
             liberties[point] = length(group.liberties)
         end
     end
-    one_hot(liberties, maxval=maxval)
+    discretize(liberties, maxval=maxval)
 end
 
 # Liberties after move
@@ -64,9 +68,9 @@ function after_move_features(board::Board; maxval=8)
             end
         end
     end
-    cat(3, one_hot(liberties, maxval=maxval),
-        one_hot(groupsize, maxval=maxval),
-        one_hot(capture_size, maxval=maxval))
+    cat(3, discretize(liberties, maxval=maxval),
+        discretize(groupsize, maxval=maxval),
+        discretize(capture_size, maxval=maxval))
 end
 
 function ladder_capture(board::Board)
@@ -83,14 +87,21 @@ function player_color(board::Board)
     fill!(BitArray(N, N), is_black)
 end
 
-function get_features(board::Board, features::Vector{Function})
+#TODO: Provide features memory to write into to avoid unnecessary copies
+function get_features(board::Board; features::Vector{Function}=DEFAULT_FEATURES)
     processed = Vector{BitArray}()
     for feature in features
-        @show feature
         push!(processed, feature(board))
     end
     return cat(3, processed...)
 end
 
+# Run feature extraction on an empty board to get the dimensionality
+function get_input_size(features::Vector{Function})
+    size(get_features(Board(), features=features))
+end
+
+# TODO: Make a FeatureSet type to hold this
 DEFAULT_FEATURES = [player_color, liberties]
 ALL_FEATURES = [player_color, liberties, ones, zeros, turns_since, after_move_features, player_color]
+
