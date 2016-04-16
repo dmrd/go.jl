@@ -1,50 +1,96 @@
-using Mocha
+using PyCall
 
+@pyimport keras.models as models
+@pyimport keras.layers.core as core
+@pyimport keras.layers.convolutional as kconv
 
-function train_model(hdf5filename::AbstractString)
-    data_layer = AsyncHDF5DataLayer(name="train-data", source=hdf5filename, batch_size=1, shuffle=true)
-    fc_layer = InnerProductLayer(name="ip", output_dim=N*N, bottoms=[:data], tops=[:ip])
-    softmax_layer = SoftmaxLossLayer(name="loss", bottoms=[:ip, :label])
+abstract Policy
 
-    backend = DefaultBackend()
-    init(backend)
-
-    net = Net("policy-train", backend, [data_layer, fc_layer, softmax_layer])
-    exp_dir = "snapshots-$(Mocha.default_backend_type)"
-    method = SGD()
-
-    params = make_solver_parameters(method, max_iter=10000, regu_coef=0.0005,
-                                mom_policy=MomPolicy.Fixed(0.9),
-                                lr_policy=LRPolicy.Inv(0.01, 0.0001, 0.75),
-                                load_from=exp_dir)
-    solver = Solver(method, params)
-
-    setup_coffee_lounge(solver, save_into="$exp_dir/statistics.jld", every_n_iter=1000)
-
-    # report training progress every 100 iterations
-    add_coffee_break(solver, TrainingSummary(), every_n_iter=100)
-
-    # save snapshots every 5000 iterations
-    #add_coffee_break(solver, Snapshot(exp_dir), every_n_iter=5000)
-
-    ## show performance on test data every 1000 iterations
-    #data_layer_test = HDF5DataLayer(name="test-data", source="data/test.txt", batch_size=100)
-    #acc_layer = AccuracyLayer(name="test-accuracy", bottoms=[:ip2, :label])
-    #test_net = Net("MNIST-test", backend, [data_layer_test, common_layers..., acc_layer])
-    #add_coffee_break(solver, ValidationPerformance(test_net), every_n_iter=1000)
-
-    solve(solver, net)
-
-    #Profile.init(int(1e8), 0.001)
-    #@profile solve(solver, net)
-    #open("profile.txt", "w") do out
-    #  Profile.print(out)
-    #end
-
-    destroy(net)
-    destroy(test_net)
-    shutdown(backend)
+type KerasNetwork <: Policy
+    # Ick - is there some way of improving typing here?
+    model::Module
+    features::Vector{Function}  # Feature extractors to run
+    # Make it callable if given a raw object
+    KerasNetwork(model::PyCall.PyObject, features) = new(pywrap(model), features)
+    KerasNetwork(model::Module, features) = new(model, features)
 end
 
-function policy()
+function reverse_dims(arr::AbstractArray)
+    permutedims(arr, length(size(arr)):-1:1)
+end
+
+# Simple softmax classifier
+function LINEAR_CLF(features::Vector{Function})
+    input_shape = get_input_size(features)
+    KerasNetwork(models.Sequential([
+                                    core.Flatten(input_shape=input_shape),
+                                    core.Dense(N*N, input_dim=(N*N)),
+                                    core.Activation("softmax")
+                                    ]),
+                 features)
+end
+
+# Roughly recreate the alphago SL network
+function ALPHAGO_NETWORK(features::Vector{Function}, nfilters::Int, nreps=11)
+    input_shape = get_input_size(features)
+    KerasNetwork(models.Sequential([
+                                    kconv.Convolution2D(k, (5,5), activation="relu", border_mode="same", input_shape=input_shape)
+                                    [kconv.Convolution2D(k, (3,3), activation="relu", border_mode="same")
+                                     for i in 1:nreps]...
+                                    kconv.Convolution2D(1, (1,1), activation="relu", border_mode="same")
+                                    core.Dense(N*N, activation="tanh")
+                                    core.Dense(N*N, activation="softmax")
+                                    ]),
+                 features)
+end
+
+function train_model(network::KerasNetwork, X, Y)
+    # Localize 
+    X = reverse_dims(X)
+    Y = reverse_dims(Y)
+    network.model.compile(loss="categorical_crossentropy",
+            optimizer="adadelta",
+                          metrics=["accuracy"])
+    network.model.fit(X, Y, nb_epoch=5, batch_size=32)
+end
+
+function save_model(network::KerasNetwork, folder::AbstractString, name::AbstractString)
+    hf5path = joinpath(folder, string(name, ".h5"))
+    ymlpath = joinpath(folder, string(name, ".yml"))
+    isfile(hf5path) && (println(STDERR, "File exists: $(hf5path)"); return)
+    isfile(ymlpath) && (println(STDERR, "File exists: $(ymlpath)"); return)
+    network.model.save_weights(hf5path)
+    yaml = network.model.to_yaml()
+    open(joinpath(folder, string(name, ".yml")), "w") do file
+        write(file, yaml)
+    end
+end
+
+function load_keras_model(folder::AbstractString, name::AbstractString, features::Vector{Function})
+    open(joinpath(folder, string(name, ".yml")), "r") do file
+        yaml = readall(file)
+        model = pywrap(models.model_from_yaml(yaml))
+        model.load_weights(joinpath(folder, string(name, ".h5")))
+        # Need to compile in order to predict anything even if we aren't training
+        model.compile(loss="categorical_crossentropy", optimizer="adadelta", metrics=["accuracy"])
+        KerasNetwork(model, features)
+    end
+end
+
+# A policy takes a board and outputs a probability distribution over moves
+
+function choose_move(board::Board, policy::KerasNetwork)
+    X = reverse_dims(get_features(board))
+    X = reshape(X, 1, size(X)...)  # Pad it out so it is a batch of size 1
+    # Have to convert to float before passing in (TODO - make this clearer)
+    probs = policy.model.predict_proba(X * 1.0)[:]
+    moves = sortperm(probs)
+    color = current_player(board)
+    for move in moves
+        point = pointindex(move)
+        if is_legal(board, point, color)
+            return point
+        end
+    end
+    return PASS_MOVE
 end
