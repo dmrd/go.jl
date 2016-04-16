@@ -7,7 +7,8 @@ function move_onehot(move::Point)
     board
 end
 
-function generate_training_data(filename::AbstractString)
+function generate_training_data(filename::AbstractString;
+                                features::Vector{Function}=DEFAULT_FEATURES)
     sgf = SGF(filename)
     examples = Vector{Tuple{BitArray, BitArray}}()
     if sgf == nothing
@@ -20,8 +21,8 @@ function generate_training_data(filename::AbstractString)
             break
         end
         if move != PASS_MOVE
-            features = get_features(board)[:]
-            answer = move_onehot(move)[:]
+            features = get_features(board)
+            answer = move_onehot(move)
             push!(examples, (features, answer))
         end
         play_move(board, move)
@@ -30,12 +31,14 @@ function generate_training_data(filename::AbstractString)
 end
 
 
-function generate_training_data(filenames::Vector{AbstractString}; progress_update=100)
+function generate_training_data(filenames::Vector{AbstractString};
+                                progress_update=100,
+                                features::Vector{Function} = DEFAULT_FEATURES)
     examples = Vector{Tuple{BitArray, BitArray}}()
     tm = time()
     for (i, filename) in enumerate(filenames)
         if i % progress_update == 0
-            println(STDERR, "$(i)/$(length(examples)): $(time() - tm)")
+            println(STDERR, "$(i)/$(length(filenames)): $(time() - tm)")
         end
         push!(examples, generate_training_data(filename)...)
     end
@@ -46,6 +49,7 @@ function write_hdf5(filename::AbstractString, examples::Vector{Tuple{BitArray, B
     data = hcat([x[1] for x in examples]...)
     label = hcat([x[2] for x in examples]...)
     h5open(filename, "w") do file
+        # Convert to float and write
         write(file, "data", 1.0 * data)
         write(file, "label", 1.0 *label)
     end
@@ -91,7 +95,8 @@ function find_sgf(folder::AbstractString)
 end
 
 
-function generate_and_save_examples(folder::AbstractString, out_hf5_path::AbstractString)
+function generate_and_save_examples(folder::AbstractString, out_hf5_path::AbstractString;
+                                    features::Vector{Function} = DEFAULT_FEATURES)
     files = find_sgf(folder)
     filtered_files =  filter(x -> players_over_rating(x, 2000), files)
     examples = generate_training_data(filtered_files)
