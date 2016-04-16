@@ -64,9 +64,9 @@ function after_move_features(board::Board; maxval=8)
             end
         end
     end
-    (one_hot(liberties, maxval=maxval),
-    one_hot(groupsize, maxval=maxval),
-    one_hot(capture_size, maxval=maxval))
+    cat(3, one_hot(liberties, maxval=maxval),
+        one_hot(groupsize, maxval=maxval),
+        one_hot(capture_size, maxval=maxval))
 end
 
 function ladder_capture(board::Board)
@@ -83,17 +83,14 @@ function player_color(board::Board)
     fill!(BitArray(N, N), is_black)
 end
 
-function get_features(board::Board)
-    features = Vector{BitArray}()
-    push!(features, stone_color(board))
-    push!(features, ones(board))
-    push!(features, zeros(board))
-    push!(features, turns_since(board))
-    push!(features, liberties(board))
-    push!(features, after_move_features(board)...)
-    push!(features, player_color(board))
-    return cat(3, features...)
+function get_features(board::Board, features::Vector{Function})
+    processed = Vector{BitArray}()
+    for feature in features
+        @show feature
+        push!(processed, feature(board))
+    end
+    return cat(3, processed...)
 end
 
-b = Board()
-get_features(b)
+DEFAULT_FEATURES = [player_color, liberties]
+ALL_FEATURES = [player_color, liberties, ones, zeros, turns_since, after_move_features, player_color]
