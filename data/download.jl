@@ -45,7 +45,8 @@ function download_archive(url, outdir;expand=false, remove=false)
     archive = get(url)
     save(archive, outpath)  # Save the payload to a file
     if expand
-        run(`tar xfz $(outpath)`)
+
+        run(`tar xfz $(outpath) -C $(outdir)`)
     end
     if remove
         run(`rm $(outpath)`)
@@ -53,11 +54,9 @@ function download_archive(url, outdir;expand=false, remove=false)
 end
 
 function download_all(urls, outdir)
-    names = fetch_names()
-    n = length(names)
     ts = time()
-    for (i,url) in enumerate(names)
-        println("$(i)/$(n): $(url)")
+    for (i,url) in enumerate(urls)
+        println("$(i)/$(length(urls)): $(url)")
         download_archive(url, outdir, expand=true, remove=true)
     end
     println("Took $(time() - ts) seconds")

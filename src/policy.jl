@@ -53,8 +53,8 @@ function reverse_dims(arr::AbstractArray)
     reshape(arr, reverse(size(arr)))
 end
 
-# Simple softmax classifier
-function LINEAR_CLF(features::Vector{Function})
+"Simple softmax classifier"
+function CLF_LINEAR(features::Vector{Function})
     input_shape = get_input_size(features)
     KerasNetwork(models.Sequential([
                                     core.Flatten(input_shape=input_shape),
@@ -64,28 +64,32 @@ function LINEAR_CLF(features::Vector{Function})
                  features)
 end
 
-# Roughly recreate the alphago SL network
-function ALPHAGO_NETWORK(features::Vector{Function}, nfilters::Int, nreps=11)
-    k = nfilters
+"""
+Network from `Teaching Deep Convolutional Neural Networks to Play Go`
+Designed for 19x19, but should be fine for other sizes as well
+"""
+function CLF_DCNN(features::Vector{Function})
     # Reverse because julia <--> python
     input_shape = reverse(get_input_size(features))
     KerasNetwork(models.Sequential([
-                                    kconv.Convolution2D(k, nb_row=5, nb_col=5, activation="relu", border_mode="same", input_shape=input_shape),
-                                    #kconv.Convolution2D(1, nb_row=5, nb_col=5, activation="relu", border_mode="same", input_shape=input_shape),
-                                    # [kconv.Convolution2D(k, nb_row=3, nb_col=3, activation="relu", border_mode="same")
-                                    #  for i in 1:nreps]...,
-                                    # kconv.Convolution2D(1, nb_row=1, nb_col=1, activation="relu", border_mode="same"),
-                                    core.Flatten(),
-                                    core.Dense(N*N, activation="softmax")
+      kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      core.Flatten(),
+      core.Dense(N*N, activation="softmax")
                                     ]),
-                 features)
+      features)
 end
 
-function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, continuing=false, validation_split=0.25)
+function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, recompile=true, validation_split=0.25)
     # Reverse because julia <--> python
     X = reverse_dims(X)
     Y = reverse_dims(Y)
-    if !continuing
+    if recompile
         network.model.compile(loss="categorical_crossentropy",
                               optimizer="adadelta",
                               metrics=["accuracy"])
