@@ -14,8 +14,6 @@
 import Base.getindex
 import Base.setindex!
 import Base.zeros
-using DataStructures
-
 
 # Making the board size a global constant for simplicity
 const N = 9
