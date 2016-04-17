@@ -1,5 +1,3 @@
-using HDF5
-
 function move_onehot(move::Point)
     board = BitArray(N, N)
     fill!(board, false)
@@ -44,16 +42,6 @@ function generate_training_data(filenames::Vector{AbstractString};
         push!(examples, generate_training_data(filename, features=features)...)
     end
     examples
-end
-
-function write_hdf5(filename::AbstractString, examples::Vector{Tuple{BitArray, BitArray}})
-    data = hcat([x[1] for x in examples]...)
-    label = hcat([x[2] for x in examples]...)
-    h5open(filename, "w") do file
-        # Convert to float and write
-        write(file, "data", 1.0 * data)
-        write(file, "label", 1.0 *label)
-    end
 end
 
 """
