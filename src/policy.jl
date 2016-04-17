@@ -50,7 +50,7 @@ function KerasNetwork(folder::AbstractString, name::AbstractString)
 end
 
 function reverse_dims(arr::AbstractArray)
-    permutedims(arr, length(size(arr)):-1:1)
+    reshape(arr, reverse(size(arr)))
 end
 
 # Simple softmax classifier
@@ -66,26 +66,32 @@ end
 
 # Roughly recreate the alphago SL network
 function ALPHAGO_NETWORK(features::Vector{Function}, nfilters::Int, nreps=11)
-    input_shape = get_input_size(features)
+    k = nfilters
+    # Reverse because julia <--> python
+    input_shape = reverse(get_input_size(features))
     KerasNetwork(models.Sequential([
-                                    kconv.Convolution2D(k, (5,5), activation="relu", border_mode="same", input_shape=input_shape)
-                                    [kconv.Convolution2D(k, (3,3), activation="relu", border_mode="same")
-                                     for i in 1:nreps]...
-                                    kconv.Convolution2D(1, (1,1), activation="relu", border_mode="same")
-                                    core.Dense(N*N, activation="tanh")
+                                    kconv.Convolution2D(k, nb_row=5, nb_col=5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    #kconv.Convolution2D(1, nb_row=5, nb_col=5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    # [kconv.Convolution2D(k, nb_row=3, nb_col=3, activation="relu", border_mode="same")
+                                    #  for i in 1:nreps]...,
+                                    # kconv.Convolution2D(1, nb_row=1, nb_col=1, activation="relu", border_mode="same"),
+                                    core.Flatten(),
                                     core.Dense(N*N, activation="softmax")
                                     ]),
                  features)
 end
 
-function train_model(network::KerasNetwork, X, Y)
-    # Localize 
+function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, continuing=false, validation_split=0.25)
+    # Reverse because julia <--> python
     X = reverse_dims(X)
     Y = reverse_dims(Y)
-    network.model.compile(loss="categorical_crossentropy",
-            optimizer="adadelta",
-                          metrics=["accuracy"])
-    network.model.fit(X, Y, nb_epoch=5, batch_size=32)
+    if !continuing
+        network.model.compile(loss="categorical_crossentropy",
+                              optimizer="adadelta",
+                              metrics=["accuracy"])
+    end
+    network.model.fit(X, Y, nb_epoch=epochs, batch_size=batch_size, verbose=2,
+                      validation_split=validation_split)
 end
 
 function save_model(network::KerasNetwork, folder::AbstractString, name::AbstractString)
@@ -99,7 +105,7 @@ function save_model(network::KerasNetwork, folder::AbstractString, name::Abstrac
     # Add feature names
     # e.g. -> player_colors, liberties, ...
     # the split is to remove "go." - caused problems when reading in
-    features = join(map(x -> split(string(x), ".")[2], network.features), ", ")
+    features = join(map(x -> split(string(x), ".")[end], network.features), ", ")
     yaml = string(yaml, "\nfeatures: [$(features)]")
 
     open(joinpath(folder, string(name, ".yml")), "w") do file
@@ -110,7 +116,7 @@ end
 # A policy takes a board and outputs a probability distribution over moves
 
 function choose_move(board::Board, policy::KerasNetwork)
-    X = reverse_dims(get_features(board))
+    X = reverse_dims(get_features(board, features=policy.features))
     X = reshape(X, 1, size(X)...)  # Pad it out so it is a batch of size 1
     # Have to convert to float before passing in (TODO - make this clearer)
     probs = policy.model.predict(X * 1.0)[:]

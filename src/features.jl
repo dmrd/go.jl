@@ -36,16 +36,38 @@ function turns_since(board::Board; maxval=8)
     discretize(board.cmove - board.order, maxval=maxval)
 end
 
-function liberties(board::Board; maxval=8)
+function liberties(board::Board; maxval=3)
     liberties = Array{Int}(N,N)
     for x in 1:N
         for y in 1:N
             point = Point(y,x)
-            group = board.groups[Point(y,x)]
+            group = board.groups[point]
             liberties[point] = length(group.liberties)
         end
     end
     discretize(liberties, maxval=maxval)
+end
+
+"Encode how many liberty counts broken down by stone color"
+function perplayer_liberties(board::Board, maxval=3)
+    cp = current_player(board)
+    cur_liberties = Array{Int}(N,N)
+    op_liberties = Array{Int}(N,N)
+    fill!(cur_liberties, 0)
+    fill!(op_liberties, 0)
+    for x in 1:N
+        for y in 1:N
+            point = Point(y,x)
+            group = board.groups[point]
+            count = length(group.liberties)
+            if board[point] == cp
+                cur_liberties[point] = count
+            else
+                op_liberties[point] = count
+            end
+        end
+    end
+    cat(3, discretize(cur_liberties, maxval=3), discretize(op_liberties, maxval=3))
 end
 
 # Liberties after move
@@ -102,6 +124,7 @@ function get_input_size(features::Vector{Function})
 end
 
 # TODO: Make a FeatureSet type to hold this
-DEFAULT_FEATURES = [player_color, liberties]
-ALL_FEATURES = [player_color, liberties, ones, zeros, turns_since, after_move_features, player_color]
+LIBERTIES = [perplayer_liberties]
+DEFAULT_FEATURES = [stone_color, liberties]
+ALL_FEATURES = [stone_color, liberties, ones, zeros, turns_since, after_move_features, player_color]
 
