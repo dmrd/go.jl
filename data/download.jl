@@ -1,12 +1,25 @@
-# Script to download the kgs archives
-# Use from repl
+# Script to download the go archives
+# Can download all with:
+# download_all(cgs_archives, "outdir_path")
 
 using Requests
 
-function fetch_names()
-    url = "http://www.u-go.net/gamerecords/"
+# Links for current cgs game server.  More online here: 
+#cgs_old_url = "http://cgos.boardspace.net/9x9/archive.html"
+#cgs_new_url = "http://www.yss-aya.com/cgos/9x9/archive.html"
+cgs_archives = [
+               "http://www.yss-aya.com/cgos/9x9/archives/9x9_2016_03.tar.bz2"
+               "http://www.yss-aya.com/cgos/9x9/archives/9x9_2016_02.tar.bz2"
+               "http://www.yss-aya.com/cgos/9x9/archives/9x9_2016_01.tar.bz2"
+               "http://www.yss-aya.com/cgos/9x9/archives/9x9_2015_12.tar.bz2"
+               "http://www.yss-aya.com/cgos/9x9/archives/9x9_2015_11.tar.bz2"
+               ]
+
+"Fetch the urls for all the kgs game records"
+function fetch_kgs_urls()
     # Download page source & parse out the record names
-    response = get(url)
+    kgs_url = "http://www.u-go.net/gamerecords/"
+    response = get(kgs_url)
     html = readall(response)
     fileurls = Vector{AbstractString}()
     regex = r"(dl\..*\.tar\.bz2)"
@@ -23,8 +36,9 @@ function fetch_names()
     fileurls
 end
 
-
+"Download file and optionally untar/bz2 and remove archive"
 function download_archive(url, outdir;expand=false, remove=false)
+    !ispath(outdir) && mkdir(outdir)
     name = ascii(split(url, "/")[end])
     outpath = joinpath(outdir, name)
 
@@ -38,7 +52,7 @@ function download_archive(url, outdir;expand=false, remove=false)
     end
 end
 
-function run_all(outdir)
+function download_all(urls, outdir)
     names = fetch_names()
     n = length(names)
     ts = time()
