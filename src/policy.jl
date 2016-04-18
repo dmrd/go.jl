@@ -37,6 +37,7 @@ function KerasNetwork(folder::AbstractString, name::AbstractString)
         yaml = readall(file)
         model = pywrap(models.model_from_yaml(yaml))
         model.load_weights(joinpath(folder, string(name, ".h5")))
+
         # Need to compile in order to predict anything even if we aren't training
         model.compile(loss="categorical_crossentropy", optimizer="adadelta", metrics=["accuracy"])
 
@@ -81,11 +82,7 @@ function CLF_DCNN(features::Vector{Function})
     input_shape = reverse(get_input_size(features))
     KerasNetwork(models.Sequential([
       kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       core.Flatten(),
       core.Dense(N*N, activation="softmax")
@@ -98,10 +95,12 @@ function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, rec
     X = to_python(X)
     Y = to_python(Y)
     if recompile
+        println(STDERR, "Compiling model...")
         network.model.compile(loss="categorical_crossentropy",
                               optimizer="adadelta",
                               metrics=["accuracy"])
     end
+    println(STDERR, "Fitting data...")
     network.model.fit(X, Y, nb_epoch=epochs, batch_size=batch_size, verbose=2,
                       validation_split=validation_split)
 end
