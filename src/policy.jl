@@ -75,9 +75,6 @@ function CLF_DCNN(features::Vector{Function})
       kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       core.Flatten(),
       core.Dense(N*N, activation="softmax")
