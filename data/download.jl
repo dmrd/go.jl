@@ -4,7 +4,7 @@
 
 using Requests
 
-# Links for current cgs game server.  More online here: 
+# Links for current cgs game server.  More online here:
 #cgs_old_url = "http://cgos.boardspace.net/9x9/archive.html"
 #cgs_new_url = "http://www.yss-aya.com/cgos/9x9/archive.html"
 cgs_archives = [
@@ -37,7 +37,7 @@ function fetch_kgs_urls()
 end
 
 "Download file and optionally untar/bz2 and remove archive"
-function download_archive(url, outdir;expand=false, remove=false)
+function download_archive(url, outdir; expand=false, remove=false)
     !ispath(outdir) && mkdir(outdir)
     name = ascii(split(url, "/")[end])
     outpath = joinpath(outdir, name)
@@ -45,8 +45,7 @@ function download_archive(url, outdir;expand=false, remove=false)
     archive = get(url)
     save(archive, outpath)  # Save the payload to a file
     if expand
-
-        run(`tar xfz $(outpath) -C $(outdir)`)
+        @osx? run(`tar xfz $(outpath) -C $(outdir)`) : run(`tar xjf $(outpath) -C $(outdir)`)
     end
     if remove
         run(`rm $(outpath)`)
