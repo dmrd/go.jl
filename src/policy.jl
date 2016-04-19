@@ -82,7 +82,10 @@ function CLF_DCNN(features::Vector{Function})
     input_shape = reverse(get_input_size(features))
     KerasNetwork(models.Sequential([
       kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       core.Flatten(),
       core.Dense(N*N, activation="softmax")

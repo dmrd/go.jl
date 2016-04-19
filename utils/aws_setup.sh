@@ -20,3 +20,10 @@ echo "export CUDA_HOME=/usr/local/cuda-7.5" >> ~/.bashrc
 echo "export LD_LIBRARY_PATH=${CUDA_HOME}/lib64"  >> ~/.bashrc
 echo "PATH=${CUDA_HOME}/bin:${PATH}"  >> ~/.bashrc
 echo "export PATH" >> ~/.bashrc
+
+# CUDNN
+# TODO: Download?
+tar xzvf cudnn.tgz
+cd cuda/
+sudo cp lib64/* /usr/local/cuda/lib64/
+sudo cp include/cudnn.h /usr/local/cuda/include/
