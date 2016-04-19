@@ -6,9 +6,9 @@ Discretize a 2D integer matrix into `maxval` binary layers
 Layers correspond to == 1, == 2, ... == (maxval - 1), >= maxval
 """
 function discretize(counts::Array{Int, 2}; maxval=8)
-    out = BitArray(N, N, maxval)
+    out = BitArray(size(counts)..., maxval)
     for i in 1:(maxval-1)
-        out[:, :, i] = counts == i
+        out[:, :, i] = counts .== i
     end
     out[:, :, maxval] = counts .>= maxval
     out
@@ -62,7 +62,7 @@ function perplayer_liberties(board::Board, maxval=3)
             count = length(group.liberties)
             if board[point] == cp
                 cur_liberties[point] = count
-            else
+            elseif board[point] == -cp
                 op_liberties[point] = count
             end
         end
