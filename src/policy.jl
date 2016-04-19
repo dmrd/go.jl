@@ -4,6 +4,7 @@ using PyCall
 @pyimport keras.layers.core as core
 @pyimport keras.layers.convolutional as kconv
 @pyimport yaml as pyyaml
+@pyimport numpy as np
 
 abstract Policy
 # Policy must have:
@@ -49,8 +50,15 @@ function KerasNetwork(folder::AbstractString, name::AbstractString)
     end
 end
 
-function reverse_dims(arr::AbstractArray)
-    reshape(arr, reverse(size(arr)))
+"""
+Utility to handle difference between python and julia (column major) ordering
+"""
+function to_python(arr::AbstractArray)
+    np.reshape(arr[:], reverse(size(arr)))
+end
+
+function to_python(arr::AbstractArray, size_for_python)
+    np.reshape(arr[:], size_for_python)
 end
 
 "Simple softmax classifier"
@@ -87,8 +95,8 @@ end
 
 function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, recompile=true, validation_split=0.25)
     # Reverse because julia <--> python
-    X = reverse_dims(X)
-    Y = reverse_dims(Y)
+    X = to_python(X)
+    Y = to_python(Y)
     if recompile
         network.model.compile(loss="categorical_crossentropy",
                               optimizer="adadelta",
@@ -120,11 +128,11 @@ end
 # A policy takes a board and outputs a probability distribution over moves
 
 function choose_move(board::Board, policy::KerasNetwork)
-    X = reverse_dims(get_features(board, features=policy.features))
-    X = reshape(X, 1, size(X)...)  # Pad it out so it is a batch of size 1
+    X = get_features(board, features=policy.features) * 1.0
+    X = to_python(X, (1, reverse(size(X))...))  # Pad it out so it is a batch of size 1
     # Have to convert to float before passing in (TODO - make this clearer)
-    probs = policy.model.predict(X * 1.0)[:]
-    moves = sortperm(probs)
+    probs = policy.model.predict(X)[:]
+    moves = sortperm(probs, rev=true)
     color = current_player(board)
     for move in moves
         point = pointindex(move)
