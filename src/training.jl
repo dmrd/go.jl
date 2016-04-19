@@ -8,7 +8,7 @@ end
 "Generate training data of form [(features, move), ...] for a single sgf file"
 function generate_training_data(filename::AbstractString;
                                 features::Vector{Function}=DEFAULT_FEATURES)
-    sgf = SGF(filename)
+    sgf = load_sgf(filename)
     examples = Vector{Tuple{BitArray, BitArray}}()
     if sgf == nothing
         return examples
@@ -42,47 +42,6 @@ function generate_training_data(filenames::Vector{AbstractString};
         push!(examples, generate_training_data(filename, features=features)...)
     end
     examples
-end
-
-"""
-Utility function
-Use to filter a list of sgf files to games where both players are above `minrating`
-"""
-function players_over_rating(filename::AbstractString, minrating::Int)
-    open(filename) do f
-        lines = readall(f)
-        wrating_regex = r"WR\[([0-9]{4})\]"
-        brating_regex = r"BR\[([0-9]{4})\]"
-        mw = match(wrating_regex, lines)
-        mb = match(brating_regex, lines)
-        if mw == nothing || mb == nothing
-            return false
-        end
-        if parse(Int, mw.captures[1]) < minrating || parse(Int, mb.captures[1]) < minrating
-            return false
-        end
-        return true
-    end
-end
-
-"find sgf files in a folder"
-function find_sgf(folder::AbstractString)
-    files = Vector{AbstractString}()
-    folders = Vector{AbstractString}()
-    push!(folders, folder)
-    while length(folders) > 0
-        cpath = pop!(folders)
-        contents = readdir(cpath)
-        for entry in contents
-            path = joinpath(cpath, entry)
-            if isdir(path)
-                push!(folders, path)
-            elseif endswith(path, ".sgf")
-                push!(files, path)
-            end
-        end
-    end
-    files
 end
 
 """

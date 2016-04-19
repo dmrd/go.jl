@@ -1,4 +1,4 @@
-# Simple tool for incrementally reading basic SGF files
+# Simple utils for incrementally reading basic SGF files
 
 type SGF
     parts::Vector{AbstractString}
@@ -8,46 +8,58 @@ type SGF
     cplayer::Color  # Track here so we can read without updating board state
 end
 
+# Example reading in SGF and updating board:
+function playout_sgf(filecontents::AbstractString)
+    sgf = go.SGF(filecontents)
+    board = go.Board()
+    while true
+        move = get_next_move(sgf)
+        if move == nothing
+            break
+        end
+        play_move(board, move)
+    end
+    board
+end
+
+function load_sgf(filename::AbstractString)
+    f = open(filename, "r")
+    contents = readall(f)
+    SGF(contents)
+end
 
 # Returns nothing if the game contains unsupported features
-function SGF(filename::AbstractString)
-    f = open(filename, "r")
-    lines = readall(f)
-
+function SGF(contents::AbstractString)
     # Check if there is a handicap - we want to ignore these
     handicap_regex = r"A[W|B]\[(|..)\]"
-    if match(handicap_regex, lines) != nothing
+    if match(handicap_regex, contents) != nothing
         println("contains handicaps: $(filename)")
         return nothing
     end
 
-    moves = split(lines, ";")
+    moves = split(contents, ";")
     sgf = SGF(moves, 1, false, false, BLACK)
     sgf
 end
 
-# Utility function
-# Use to filter out games between low ranked players
-function players_over_rating(filename::AbstractString, minrating::Int)
-    open(filename) do f
-        lines = readall(f)
-    end
-    wrating_regex = r"WR\[[0-9]{4}\]"
-    brating_regex = r"BR\[[0-9]{4}\]"
-    mw = match(wrating_regex, lines)
-    mb = match(brating_regex, lines)
-    if mw == nothing || mb == nothing
-        return false
-    end
-    if parse(Int, mw.captures[1]) < minrating || parse(Int, mb.captures[1]) < minrating
-        return false
-    end
-    return true
-end
-
+"find sgf files in a folder"
 function find_sgf(folder::AbstractString)
-    files = Vector{ByteString}
-    folders = Vector{ByteString}
+    files = Vector{AbstractString}()
+    folders = Vector{AbstractString}()
+    push!(folders, folder)
+    while length(folders) > 0
+        cpath = pop!(folders)
+        contents = readdir(cpath)
+        for entry in contents
+            path = joinpath(cpath, entry)
+            if isdir(path)
+                push!(folders, path)
+            elseif endswith(path, ".sgf")
+                push!(files, path)
+            end
+        end
+    end
+    files
 end
 
 
@@ -76,10 +88,31 @@ function get_next_move(sgf::SGF)
             if coords == ""
                 move = PASS_MOVE
             else
-                move = Point(coords[1] - 'a' + 1, coords[2] - 'a' + 1)
+                move = Point(N - (coords[2] - 'a'), coords[1] - 'a' + 1)
             end
             sgf.cplayer = -sgf.cplayer
         end
     end
     move
+end
+
+"""
+Utility function
+Use to filter a list of sgf files to games where both players are above `minrating`
+"""
+function players_over_rating(filename::AbstractString, minrating::Int)
+    open(filename) do f
+        lines = readall(f)
+        wrating_regex = r"WR\[([0-9]{4})\]"
+        brating_regex = r"BR\[([0-9]{4})\]"
+        mw = match(wrating_regex, lines)
+        mb = match(brating_regex, lines)
+        if mw == nothing || mb == nothing
+            return false
+        end
+        if parse(Int, mw.captures[1]) < minrating || parse(Int, mb.captures[1]) < minrating
+            return false
+        end
+        return true
+    end
 end

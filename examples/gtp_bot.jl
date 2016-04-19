@@ -1,7 +1,7 @@
 #!/usr/local/bin/julia
 using go
 
-model_dir = joinpath(splitdir(@__FILE__)[1], "models")
+model_dir = joinpath(splitdir(@__FILE__)[1], "../models")
 
 nargs = length(ARGS)
 if nargs == 0
