@@ -29,11 +29,11 @@ function load_sgf(filename::AbstractString)
 end
 
 # Returns nothing if the game contains unsupported features
-function SGF(contents::AbstractString)
+function SGF(contents::AbstractString; debug=false)
     # Check if there is a handicap - we want to ignore these
     handicap_regex = r"A[W|B]\[(|..)\]"
     if match(handicap_regex, contents) != nothing
-        println("contains handicaps: $(filename)")
+        debug && println(STDERR, "Contains handicaps")
         return nothing
     end
 
@@ -64,7 +64,8 @@ end
 
 
 function get_next_move(sgf::SGF)
-    regex = r"(W|B)\[(|..)\]"  # W[xx] / B[xx] / W[] / B[]
+    # Assumes the move is always right after semicolon
+    regex = r"^(W|B)\[(|..)\]"  # W[xx] / B[xx] / W[] / B[]
     move = nothing
     while move == nothing
         if sgf.cindex > length(sgf.parts)
