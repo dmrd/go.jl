@@ -56,11 +56,11 @@ end
 Utility to handle difference between python and julia (column major) ordering
 """
 function to_python(arr::AbstractArray)
-    np.reshape(arr, reverse(size(arr)))
+    np.reshape(arr[:], reverse(size(arr)))
 end
 
 function to_python(arr::AbstractArray, size_for_python)
-    np.reshape(arr, size_for_python)
+    np.reshape(arr[:], size_for_python)
 end
 
 "Simple softmax classifier"
