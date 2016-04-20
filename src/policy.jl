@@ -3,6 +3,7 @@ using PyCall
 @pyimport keras.models as models
 @pyimport keras.layers.core as core
 @pyimport keras.layers.convolutional as kconv
+@pyimport keras.callbacks as kcallbacks
 @pyimport yaml as pyyaml
 @pyimport numpy as np
 
@@ -55,11 +56,11 @@ end
 Utility to handle difference between python and julia (column major) ordering
 """
 function to_python(arr::AbstractArray)
-    np.reshape(arr[:], reverse(size(arr)))
+    np.reshape(arr, reverse(size(arr)))
 end
 
 function to_python(arr::AbstractArray, size_for_python)
-    np.reshape(arr[:], size_for_python)
+    np.reshape(arr, size_for_python)
 end
 
 "Simple softmax classifier"
@@ -82,7 +83,8 @@ function CLF_DCNN(features::Vector{Function})
     input_shape = reverse(get_input_size(features))
     KerasNetwork(models.Sequential([
       kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
       kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
@@ -93,37 +95,51 @@ function CLF_DCNN(features::Vector{Function})
       features)
 end
 
-function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, recompile=true, validation_split=0.25)
-    # Reverse because julia <--> python
-    X = to_python(X)
-    Y = to_python(Y)
+function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, recompile=true, validation_split=0.25, hf5path=nothing)
     if recompile
         println(STDERR, "Compiling model...")
         network.model.compile(loss="categorical_crossentropy",
                               optimizer="adadelta",
                               metrics=["accuracy"])
     end
-    println(STDERR, "Fitting data...")
+
+    callbacks = Vector()
+    if hf5path != nothing
+        checkpointer = kcallbacks.ModelCheckpoint(filepath=hf5path, verbose=1, save_best_only=true)
+        push!(callbacks, checkpointer)
+    end
+
+    println(STDERR, "Doing python <--> Julia conversion...")
+    # Handle the julia <--> python array conversion
+    X = to_python(X)
+    Y = to_python(Y)
+    println(STDERR, "Fitting model...")
     network.model.fit(X, Y, nb_epoch=epochs, batch_size=batch_size, verbose=2,
-                      validation_split=validation_split)
+                      validation_split=validation_split,
+                      callbacks=callbacks)
 end
 
-function save_model(network::KerasNetwork, folder::AbstractString, name::AbstractString)
-    hf5path = joinpath(folder, string(name, ".h5"))
-    ymlpath = joinpath(folder, string(name, ".yml"))
-    isfile(hf5path) && (println(STDERR, "File exists: $(hf5path)"); return)
-    isfile(ymlpath) && (println(STDERR, "File exists: $(ymlpath)"); return)
-    network.model.save_weights(hf5path)
-    yaml = network.model.to_yaml()
+function save_model(network::KerasNetwork, folder::AbstractString, name::AbstractString; save_yaml=true, save_weights=true)
+    if save_weights
+        hf5path = joinpath(folder, string(name, ".h5"))
+        isfile(hf5path) && (println(STDERR, "File exists: $(hf5path)"); return)
+        network.model.save_weights(hf5path)
+    end
 
-    # Add feature names
-    # e.g. -> player_colors, liberties, ...
-    # the split is to remove "go." - caused problems when reading in
-    features = join(map(x -> split(string(x), ".")[end], network.features), ", ")
-    yaml = string(yaml, "\nfeatures: [$(features)]")
+    if save_yaml
+        ymlpath = joinpath(folder, string(name, ".yml"))
+        isfile(ymlpath) && (println(STDERR, "File exists: $(ymlpath)"); return)
+        yaml = network.model.to_yaml()
 
-    open(joinpath(folder, string(name, ".yml")), "w") do file
-        write(file, yaml)
+        # Add feature names
+        # e.g. -> player_colors, liberties, ...
+        # the split is to remove "go." - caused problems when reading in
+        features = join(map(x -> split(string(x), ".")[end], network.features), ", ")
+        yaml = string(yaml, "\nfeatures: [$(features)]")
+
+        open(joinpath(folder, string(name, ".yml")), "w") do file
+            write(file, yaml)
+        end
     end
 end
 

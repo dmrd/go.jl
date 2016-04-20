@@ -39,7 +39,10 @@ function generate_training_data(filenames::Vector{AbstractString};
         if i % progress_update == 0
             println(STDERR, "$(i)/$(length(filenames)): $(time() - tm)")
         end
-        push!(examples, generate_training_data(filename, features=features)...)
+	game = generate_training_data(filename, features=features)
+        if length(game) > 0
+            push!(examples, game...)
+        end
     end
     examples
 end
