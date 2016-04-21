@@ -8,18 +8,16 @@ function gtp(policy::Policy)
                       "final_score", "quit", "name", "version", "known_command",
                       "list_commands", "protocol_version", "tsdebug"]
     board = Board()
-    f = open("/Users/dmrd/go.log", "w")  # Temporary debug log
-    redirect_stderr(f)
     while true
-        println(f, "start====")
-        flush(f)
+        println(STDERR, "start====")
+        flush(STDERR)
         if eof(STDIN)
             return
         end
         line = readline()
-        println(f, line)
-        println(f, "========")
-        flush(f)
+        println(STDERR, line)
+        println(STDERR, "========")
+        flush(STDERR)
         if line == ""
             continue
         end
@@ -47,16 +45,16 @@ function gtp(policy::Policy)
             else 
                 move = parse_coord(command[3])
             end
-            println(f, command)
-            println(f, move)
+            println(STDERR, command)
+            println(STDERR, move)
             play_move(board, move)
-            println(f, "played move")
+            println(STDERR, "played move")
         elseif command[1] == "genmove"
             move = choose_move(board, policy)
             play_move(board, move)
             ret = str_coord(move)
-            println(f, ret)
-            println(f, move)
+            println(STDERR, ret)
+            println(STDERR, move)
             # TODO: Resigning, passing
         elseif command[1] == "final_score"
             score = calculate_score(board)
@@ -96,8 +94,8 @@ function gtp(policy::Policy)
             out = @sprintf("?%s ???\n\n", cmdid)
         end
         @printf("%s", out)
-        println(f, out)
+        println(STDERR, out)
         flush(STDOUT)
-        flush(f)
+        flush(STDERR)
     end
 end
