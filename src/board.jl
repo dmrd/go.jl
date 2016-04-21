@@ -43,7 +43,7 @@ function str_coord(point::Point)
     if point == PASS_MOVE
         return "pass"
     else
-         return @sprintf("%c%d", COLSTR[point[2]], point[1])
+        return @sprintf("%c%d", COLSTR[point[2]], point[1])
     end
 end
 
@@ -285,7 +285,7 @@ end
 
 function onboard(point::Point)
     point[1] >= 1 && point[1] <= N &&
-    point[2] >= 1 && point[2] <= N
+        point[2] >= 1 && point[2] <= N
 end
 
 # TODO: Implement as an iterator
