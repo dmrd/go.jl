@@ -53,14 +53,27 @@ function KerasNetwork(folder::AbstractString, name::AbstractString)
 end
 
 """
-Utility to handle difference between python and julia (column major) ordering
+Convert array to row major, C style arrays.
+Does not modify memory during conversion
 """
-function to_python(arr::AbstractArray)
-    np.reshape(arr[:], reverse(size(arr)))
+function to_python_array(arr::AbstractArray)
+    to_python_array(arr, size(arr)...)
 end
 
-function to_python(arr::AbstractArray, size_for_python)
-    np.reshape(arr[:], size_for_python)
+"""
+Convert array to row major, C style arrays.
+Does not modify buffer during conversion
+
+Specifically for bit arrays -> UInt8
+
+Specify dimensions IN JULIA COORDINATES
+Given Julia array with dims: (1, 2, 3)
+Return Python array with dims: (3, 2, 1)
+"""
+function to_python_array(arr::AbstractArray, dims...)
+    reshaped = reshape(arr, dims)
+    rounded = round(UInt8, reshaped)
+    PyObject(rounded, true)
 end
 
 "Simple softmax classifier"
@@ -75,24 +88,25 @@ function CLF_LINEAR(features::Vector{Function})
 end
 
 """
-Network from `Teaching Deep Convolutional Neural Networks to Play Go`
-Designed for 19x19, but should be fine for other sizes as well
-"""
+    Network from `Teaching Deep Convolutional Neural Networks to Play Go`
+    Designed for 19x19, but should be fine for other sizes as well
+    """
 function CLF_DCNN(features::Vector{Function})
     # Reverse because julia <--> python
     input_shape = reverse(get_input_size(features))
+    
     KerasNetwork(models.Sequential([
-      kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
-      core.Flatten(),
-      core.Dense(N*N, activation="softmax")
+                                    kconv.Convolution2D(64, 7, 7, activation="relu", border_mode="same", input_shape=input_shape),
+                                    kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    kconv.Convolution2D(64, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    kconv.Convolution2D(48, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    kconv.Convolution2D(32, 5, 5, activation="relu", border_mode="same", input_shape=input_shape),
+                                    core.Flatten(),
+                                    core.Dense(N*N, activation="softmax")
                                     ]),
-      features)
+                 features)
 end
 
 function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, recompile=true, validation_split=0.25, hf5path=nothing)
@@ -110,9 +124,10 @@ function train_model(network::KerasNetwork, X, Y; epochs=20, batch_size=128, rec
     end
 
     println(STDERR, "Doing python <--> Julia conversion...")
+
     # Handle the julia <--> python array conversion
-    X = to_python(X)
-    Y = to_python(Y)
+    X = to_python_array(X)
+    Y = to_python_array(Y)
     println(STDERR, "Fitting model...")
     network.model.fit(X, Y, nb_epoch=epochs, batch_size=batch_size, verbose=2,
                       validation_split=validation_split,
@@ -146,9 +161,8 @@ end
 # A policy takes a board and outputs a probability distribution over moves
 
 function choose_move(board::Board, policy::KerasNetwork)
-    X = get_features(board, features=policy.features) * 1.0
-    X = to_python(X, (1, reverse(size(X))...))  # Pad it out so it is a batch of size 1
-    # Have to convert to float before passing in (TODO - make this clearer)
+    X = get_features(board, features=policy.features)
+    X = to_python_array(X, size(X)..., 1) # Pad it out to create a batch
     probs = policy.model.predict(X)[:]
     moves = sortperm(probs, rev=true)
     color = current_player(board)
