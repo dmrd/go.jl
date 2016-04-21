@@ -37,7 +37,7 @@ function KerasNetwork(folder::AbstractString, name::AbstractString)
     open(joinpath(folder, string(name, ".yml"))) do file
         yaml = readall(file)
         model = pywrap(models.model_from_yaml(yaml))
-        model.load_weights(joinpath(folder, string(name, ".h5")))
+        model.load_weights(joinpath(folder, string(name, ".hf5")))
 
         # Need to compile in order to predict anything even if we aren't training
         model.compile(loss="categorical_crossentropy", optimizer="adadelta", metrics=["accuracy"])
@@ -136,7 +136,7 @@ end
 
 function save_model(network::KerasNetwork, folder::AbstractString, name::AbstractString; save_yaml=true, save_weights=true)
     if save_weights
-        hf5path = joinpath(folder, string(name, ".h5"))
+        hf5path = joinpath(folder, string(name, ".hf5"))
         isfile(hf5path) && (println(STDERR, "File exists: $(hf5path)"); return)
         network.model.save_weights(hf5path)
     end
@@ -161,6 +161,9 @@ end
 # A policy takes a board and outputs a probability distribution over moves
 
 function choose_move(board::Board, policy::KerasNetwork)
+    if board.last_move == PASS_MOVE
+        return PASS_MOVE
+    end
     X = get_features(board, features=policy.features)
     X = to_python_array(X, size(X)..., 1) # Pad it out to create a batch
     probs = policy.model.predict(X)[:]
