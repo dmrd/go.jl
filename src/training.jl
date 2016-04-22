@@ -1,3 +1,5 @@
+using HDF5
+
 function move_onehot(move::Point)
     board = BitArray(N, N)
     fill!(board, false)
@@ -47,6 +49,40 @@ function generate_training_data(filenames::Vector{AbstractString};
     examples
 end
 
+"Extract training data directly to an hdf5 file"
+function extract_to_hdf5(hf5_filename::AbstractString, filenames::Vector{AbstractString}, features::Vector{Function}; progress_update=1000, nlabels = 81)
+    example_data = get_features(Board(), features=features)
+    data_dim = size(example_data)
+
+    hf5 = h5open(hf5_filename, "w")
+    data = d_create(hf5, "data", datatype(UInt8),
+                 ((data_dim..., 1), (data_dim..., -1)),
+                 "chunk", (data_dim..., 1))
+    label = d_create(hf5, "label", datatype(UInt8),
+                     ((nlabels, 1), (nlabels, -1)),
+                     "chunk", (nlabels, 1))
+    tm = time()
+    nexamples = 0
+    for (i, filename) in enumerate(filenames)
+        if i % progress_update == 0
+            println(STDERR, "$(i)/$(length(filenames)): $(time() - tm)")
+        end
+        game = generate_training_data(filename, features=features)
+        if length(game) > 0
+            new_N = nexamples + length(game)
+            set_dims!(data, (data_dim..., new_N))
+            set_dims!(label, (nlabels, new_N))
+            data_batch = batch_training_examples([x[1] for x in game])
+            label_batch = batch_training_examples([x[2][:] for x in game])
+            # Assumes data is 3 dims per example and labels are 1
+            data[:, :, :, nexamples+1:new_N] = data_batch
+            label[:, nexamples+1:new_N] = label_batch
+            nexamples = new_N
+        end
+    end
+    close(hf5)
+end
+
 """
 Create a vector by appending the given arrays in memory.
 Reshape such that they are concatenated along the last+1 dimension
@@ -64,12 +100,4 @@ function batch_training_examples(arrs)
         out[start:finish] = arrs[i][:]
     end
     reshape(out, size(arrs[1])..., length(arrs))
-end
-
-function generate_and_save_examples(folder::AbstractString, out_hf5_path::AbstractString;
-                                    features::Vector{Function} = DEFAULT_FEATURES)
-    files = find_sgf(folder)
-    filtered_files =  filter(x -> players_over_rating(x, 2000), files)
-    examples = generate_training_data(filtered_files, features=features)
-    write_hdf5(out_hf5_path, examples)
 end
