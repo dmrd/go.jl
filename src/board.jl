@@ -415,19 +415,22 @@ const ascii = Dict(
                    WHITE => 'O'
                    )
 
-function board_repr(board::Board)
+function board_repr(board::Board; flipped=false)
     rows = Vector{ASCIIString}()
     mapper = char -> ascii[char]
     for row in 1:N
         row_repr = join(map(mapper, board.board[row, :]), "")
         push!(rows, string(rpad(repr(row), 3, " "), row_repr))
     end
+    if flipped
+        rows = reverse(rows)
+    end
     push!(rows, string("   ", COLSTR[1:N]))
     join(reverse(rows), "\n")
 end
 
 # Print liberties of each stone
-function liberty_counts(board::Board)
+function liberty_counts(board::Board; flipped=false)
     rows = Vector{ASCIIString}()
     mapped = []
     for space in board.groups.groups
@@ -442,12 +445,15 @@ function liberty_counts(board::Board)
         row_repr = join(reshaped[row, :], "")
         push!(rows, string(rpad(repr(row), 3, " "), row_repr))
     end
+    if flipped
+        rows = reverse(rows)
+    end
     push!(rows, string("   ", COLSTR[1:N]))
     join(reverse(rows), "\n")
 end
 
-print_pos(board::Board; output=STDERR) = println(output, board_repr(board))
-print_liberties(board::Board; output=STDERR) = println(output, liberty_counts(board))
+print_pos(board::Board; output=STDERR, flipped=false) = println(output, board_repr(board, flipped=flipped))
+print_liberties(board::Board; output=STDERR, flipped=false) = println(output, liberty_counts(board, flipped=flipped))
 
 print(board::Board) = println(board_repr(board))
 
