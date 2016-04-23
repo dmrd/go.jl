@@ -15,14 +15,18 @@ cgs_archives = [
                "http://www.yss-aya.com/cgos/9x9/archives/9x9_2015_11.tar.bz2"
                ]
 
+function fetch_kgs()
+    regex = r"(dl\..*\.tar\.bz2)"
+    url = "http://www.u-go.net/gamerecords/"
+    fetch_urls(url, regex)
+end
+
 "Fetch the urls for all the kgs game records"
-function fetch_kgs_urls()
+function fetch_urls(url, regex)
     # Download page source & parse out the record names
-    kgs_url = "http://www.u-go.net/gamerecords/"
-    response = get(kgs_url)
+    response = get(url)
     html = readall(response)
     fileurls = Vector{AbstractString}()
-    regex = r"(dl\..*\.tar\.bz2)"
     offset = 1
     while true
         result = match(regex, html, offset)
