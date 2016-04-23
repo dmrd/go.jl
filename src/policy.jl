@@ -215,9 +215,8 @@ function keras_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs
     n_examples = size(X)[end]
     close(h5)
 
-    if n_train == nothing
-        n_train = n_examples - n_validation
-    end
+    max_n_train = n_examples - n_validation
+    n_train = min(n_train, max_n_train)
 
     # These act like matrices
     trainX = k_io.HDF5Matrix(hdf5_path, "data", 0, n_train)
