@@ -100,12 +100,18 @@ end
 """
 Utility function
 Use to filter a list of sgf files to games where both players are above `minrating`
+dan: Whether the ratings are in dan
 """
-function players_over_rating(filename::AbstractString, minrating::Int)
+function players_over_rating(filename::AbstractString, minrating::Int; dan=false)
     open(filename) do f
         lines = readall(f)
-        wrating_regex = r"WR\[([0-9]{4})\]"
-        brating_regex = r"BR\[([0-9]{4})\]"
+        if dan
+            wrating_regex = r"WR\[([3-9])d\]"
+            brating_regex = r"BR\[([3-9])d\]"
+        else
+            wrating_regex = r"WR\[([0-9]{4})\]"
+            brating_regex = r"BR\[([0-9]{4})\]"
+        end
         mw = match(wrating_regex, lines)
         mb = match(brating_regex, lines)
         if mw == nothing || mb == nothing
