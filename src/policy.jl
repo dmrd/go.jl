@@ -136,8 +136,6 @@ Mainly exists for "examples_per_epoch" flag. Should consider if there is a bette
 
 TODO: async io
 
-Unclear i"
-
 """
 function julia_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs=20, examples_per_epoch=1000000, batch_size=32, recompile=true, n_validation_examples=50000, checkpoint_path=nothing)
     if recompile
@@ -205,7 +203,7 @@ function julia_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs
 end
 
 " Train from an HDF5 file "
-function keras_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs=20, batch_size=32, recompile=true, n_validation=10000, checkpoint_path=nothing)
+function keras_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs=20, batch_size=32, recompile=true, n_validation=10000, n_train=nothing, checkpoint_path=nothing)
     if recompile
         compile(network)
     end
@@ -217,12 +215,16 @@ function keras_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs
     n_examples = size(X)[end]
     close(h5)
 
-    # These act like matrices - just don't shuffle them
-    valX = k_io.HDF5Matrix(hdf5_path, "data", 0, n_validation)
-    valY = k_io.HDF5Matrix(hdf5_path, "label", 0, n_validation)
+    if n_train == nothing
+        n_train = n_examples - n_validation
+    end
 
-    trainX = k_io.HDF5Matrix(hdf5_path, "data", n_validation + 1, n_examples)
-    trainY = k_io.HDF5Matrix(hdf5_path, "label", n_validation + 1, n_examples)
+    # These act like matrices
+    trainX = k_io.HDF5Matrix(hdf5_path, "data", 0, n_train)
+    trainY = k_io.HDF5Matrix(hdf5_path, "label", 0, n_train)
+
+    valX = k_io.HDF5Matrix(hdf5_path, "data", n_train, n_train + n_validation)
+    valY = k_io.HDF5Matrix(hdf5_path, "label", n_train, n_train + n_validation)
 
     network.model.fit(trainX, trainY, nb_epoch=epochs, batch_size=batch_size, verbose=2,
                       validation_data=(valX, valY),
