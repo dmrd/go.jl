@@ -1,3 +1,7 @@
 julia 0.4
+Conda
+BinDeps
 PyCall
 Requests
+HDF5
+ArgParse
