@@ -52,7 +52,7 @@ println(STDERR, "Training...")
 tm = time()
 checkpoint_path = "../models/$(MODEL_NAME)_checkpoint.hf5"
 go.save_model(clf, "../models/", MODEL_NAME, save_weights=false, save_yaml=true) 
-go.train_model(clf, X, Y, epochs=EPOCHS, validation_split=0.05, hf5path=checkpoint_path)
+go.train_model(clf, X, Y, epochs=EPOCHS, validation_split=0.05, checkpoint_path=checkpoint_path)
 println("Took $(time() - tm) seconds")
 
 println(STDERR, "Saving model...")
