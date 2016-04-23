@@ -128,27 +128,104 @@ function _callbacks(hf5path=nothing)
 end
 
 
+# TODO: Make this less specific to this codebase / training case
+"""
+(UNFINISHED) Load an h5 file from within julia and feed the result in to `train_batch`
 
-function train_model(network::KerasNetwork, hdf5_path::AbstractString; epochs=20, examples_per_epoch=1000000, batch_size=32, recompile=true, n_validation_examples=50000, checkpoint_path=nothing)
+Mainly exists for "examples_per_epoch" flag. Should consider if there is a better work around (could store the games into smaller chunks in h5.  Then I can feed them into the general fit method.  This requires making sure the learning rate works fine.  Investigate internals.
+
+TODO: async io
+
+Unclear i"
+
+"""
+function julia_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs=20, examples_per_epoch=1000000, batch_size=32, recompile=true, n_validation_examples=50000, checkpoint_path=nothing)
     if recompile
         compile(network)
     end
 
-    # Open the file and see how many examples there are
     h5 = h5open(hdf5_path)
-    dset = h5["data"]
-    n_examples = size(dset)[end]
+    X = h5["data"]
+    Y = h5["label"]
+    n_examples = size(X)[end]
+
+    n_train_examples = n_examples - n_validation_examples
+    start_tm = time()
+    Xbatch = zeros(UInt8, size(X)[1:end-1]..., batch_size)
+    Ybatch = zeros(UInt8, size(Y)[1:end-1]..., batch_size)
+
+    train_start = 1 # iterating over dataset may take multiple epochs
+    println(STDERR, "Training on $(n_train_examples), validate on $(n_validation_examples)")
+    println(STDERR, "Examples per epoch: $(examples_per_epoch)")
+    io = 0.0
+    traintm = 0.0
+    for epoch = 1:epochs
+        examples_seen = 0
+        println(STDERR, "Epoch $(epoch)/$(epochs):")
+        train_loss = 0.0
+        val_loss = 0.0
+
+        batch_tm = time()
+        while examples_seen < examples_per_epoch
+            # May leave out a few examples at tail end for simplicity
+            if train_start > n_train_examples - batch_size
+                train_start = 1
+                # TODO: Handle the wrap around case
+            end
+            batch_end = train_start + batch_size - 1
+            # TODO: How to reduce IO overhead here?  Can I do it in a thread?
+            tm = time()
+            Xbatch[:, :, :, :] = X[:,:,:,train_start:batch_end]
+            Ybatch[:, :] = Y[:, train_start:batch_end]
+            io += time() - tm
+
+            # TODO: May be able to just do this once since we reuse memory
+            Xpy = to_python_array(Xbatch)
+            Ypy = to_python_array(Ybatch)
+
+            tm = time()
+            train_loss += network.model.train_on_batch(Xpy, Ypy)
+            traintm += time() - tm
+            examples_seen += batch_size
+        end
+
+        for batch_offset = 1:batch_size:(n_validation_examples - batch_size)
+            val_batch_start = n_train_examples + batch_offset + 1
+            val_batch_end = val_batch_start + batch_size - 1
+            Xbatch[:, :, :, :] = X[:,:,:,val_batch_start:val_batch_end]
+            Ybatch[:, :] = Y[:, val_batch_start:val_batch_end]
+
+            Xpy = to_python_array(Xbatch)
+            Ypy = to_python_array(Ybatch)
+            val_loss += network.model.test_on_batch(Xpy, Ypy)
+        end
+        println(STDERR, "Train Loss: $(train_loss) | Validation loss: $(val_loss) | Computed in $(time() - batch_tm) seconds")
+        println(STDERR, "IO:$(io), Train:$(traintm)")
+    end
+end
+
+" Train from an HDF5 file "
+function keras_train_h5(network::KerasNetwork, hdf5_path::AbstractString; epochs=20, batch_size=32, recompile=true, n_validation=10000, checkpoint_path=nothing)
+    if recompile
+        compile(network)
+    end
+
+    #Open the file and see how many examples there are
+    h5 = h5open(hdf5_path)
+    X = h5["data"]
+    Y = h5["label"]
+    n_examples = size(X)[end]
     close(h5)
 
     # These act like matrices - just don't shuffle them
-    test_X= k_io.HDF5Matrix(hdf5_path, "data", 0, n_validation_examples, normalizer=false)
-    test_Y= k_io.HDF5Matrix(hdf5_path, "label", 0, n_validation_examples, normalizer=false)
+    valX = k_io.HDF5Matrix(hdf5_path, "data", 0, n_validation)
+    valY = k_io.HDF5Matrix(hdf5_path, "label", 0, n_validation)
 
-    train_X = k_io.HDF5Matrix(hdf5_path, "data", n_validation_examples + 1, n_examples, normalizer=false)
-    train_Y = k_io.HDF5Matrix(hdf5_path, "label", n_validation_examples + 1, n_examples, normalizer=false)
+    trainX = k_io.HDF5Matrix(hdf5_path, "data", n_validation + 1, n_examples)
+    trainY = k_io.HDF5Matrix(hdf5_path, "label", n_validation + 1, n_examples)
 
-    network.model.fit(train_X, train_Y, nb_epoch=epochs, batch_size=batch_size, verbose=2,
-                      validation_data=(test_X, test_Y),
+    network.model.fit(trainX, trainY, nb_epoch=epochs, batch_size=batch_size, verbose=2,
+                      validation_data=(valX, valY),
                       shuffle="batch", # Don't want to shuffle data too large for memory
                       callbacks=_callbacks(checkpoint_path))
 end

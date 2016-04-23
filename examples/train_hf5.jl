@@ -1,3 +1,4 @@
+# Training script for h5 files using Julia to coordinate batches
 using go
 
 if length(ARGS) < 4
@@ -21,11 +22,11 @@ tm = time()
 checkpoint_path = "../models/$(MODEL_NAME)_checkpoint.hf5"
 # Save the model structure
 go.save_model(clf, "../models/", MODEL_NAME, save_weights=false, save_yaml=true) 
-go.train_model(clf, INPUT,
-               epochs=EPOCHS,
-               examples_per_epoch=500,
-               n_validation_examples=500,
-               checkpoint_path=checkpoint_path)
+go.julia_train_h5(clf, INPUT,
+                  epochs=EPOCHS,
+                  examples_per_epoch=NUM_EXAMPLES,
+                  n_validation_examples=10000,
+                  checkpoint_path=checkpoint_path)
 println("Took $(time() - tm) seconds")
 
 println(STDERR, "Saving model...")
