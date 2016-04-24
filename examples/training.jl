@@ -39,6 +39,9 @@ function parseargs()
           help = "How many moves to use for validation in h5"
           arg_type = Int
           default = 10000
+        "--load"
+          help = "Load weights when trained model already exists"
+          action = :store_true
     end
     parse_args(s)
 end
@@ -100,6 +103,10 @@ MODEL_NAME = pargs["model_name"]
 checkpoint_path = "../models/$(MODEL_NAME)_checkpoint.hf5"
 go.save_model(clf, "../models/", MODEL_NAME, save_weights=false, save_yaml=true)
 
+if pargs["load"]
+    model.load_weights("../models/$(MODEL_NAME).hf5")
+end
+
 if LOAD_H5
     go.keras_train_h5(clf, pargs["h5path"],
                       epochs=pargs["epochs"],
@@ -112,4 +119,4 @@ end
 println("Took $(time() - tm) seconds")
 
 println(STDERR, "Saving model...")
-go.save_model(clf, "../models/", MODEL_NAME, save_weights=true, save_yaml=false) 
+go.save_model(clf, "../models/", MODEL_NAME, save_weights=true, save_yaml=false, overwrite=pargs["load"]) 
