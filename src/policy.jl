@@ -55,10 +55,7 @@ function choose_move(board::Board, policy::KerasNetwork)
     if board.last_move == PASS_MOVE
         return PASS_MOVE
     end
-    X = get_features(board, features=policy.features)
-    X = to_python_array(X, size(X)..., 1) # Pad it out to create a batch
-    probs = policy.model.predict(X)[:]
-    moves = sortperm(probs, rev=true)
+    moves = move_probs(board, policy)
     color = current_player(board)
     for move in moves
         point = pointindex(move)
@@ -67,4 +64,11 @@ function choose_move(board::Board, policy::KerasNetwork)
         end
     end
     return PASS_MOVE
+end
+
+function move_probs(board::Board, policy::KerasNetwork)
+    X = get_features(board, features=policy.features)
+    X = to_python_array(X, size(X)..., 1) # Pad it out to create a batch
+    probs = policy.model.predict(X)[:]
+    sortperm(probs, rev=true)
 end
