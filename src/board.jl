@@ -26,8 +26,12 @@ Point{T <: Integer}(a::T, b::T) = Point((a, b))
 # Memory ordered - n(x-1) + y
 linearindex{T<:Integer}(point::Tuple{T,T}) = N * (point[2] - 1) + point[1]
 function pointindex{T<:Integer}(index::T)
-    y, x = divrem(index, N)
-    Point(x, y + 1)
+    x = ceil(Int, index / N)
+    y = (index % N)
+    if y == 0
+        y = 19
+    end
+    Point(y, x)
 end
 
 typealias Color Int8
@@ -36,6 +40,7 @@ const EMPTY = Color(0)
 const WHITE = Color(-1)
 const BLACK = Color(1)
 const PASS_MOVE = Point(0,0)
+const EMPTY_MOVE = Point(255,255)
 
 
 const COLSTR = "ABCDEFGHJKLMNOPQRST"
@@ -105,7 +110,7 @@ type Board
     cmove::Int
     komi::Float64
     Board() = new((0,0), zeros(Color, N, N), zeros(Int, N, N),
-                  GroupSet(), 0, Point(200,200), 1, 6.5)
+                  GroupSet(), 0, EMPTY_MOVE, 1, 6.5)
 end
 
 current_player(current_move::Integer) = current_move % 2 == 0 ? WHITE : BLACK
@@ -269,11 +274,20 @@ function add_stone(board::Board, point::Point, color::Color)
         group = merge_groups(groups, friends)
     end
 
+
+    number_taken = 0
     for foe in foes
         remove_liberty(foe, point)
         if length(foe.liberties) == 0
+            number_taken += length(foe.members)
             remove_group(board, foe)
+            board.ko = foe.members[1]  # Set here and remove below if not actually Ko
         end
+    end
+
+    # Clear Ko if it shouldn't be set
+    if number_taken != 1 || length(friends) != 0 || length(empties) != 0
+        board.ko = EMPTY_MOVE
     end
 
     for empty in empties
