@@ -16,11 +16,11 @@ import Base.setindex!
 import Base.zeros
 
 # Making the board size a global constant for simplicity
-const N = 9
+const N = 19
 
 # CONVENTION: Point is (y,x)
 # ^ I'm not sure if this was a good idea now.  May change.
-typealias Point Tuple{UInt8, UInt8}
+typealias Point Tuple{Int, Int}
 convert{T <: Integer}(::Type{Point}, x::Tuple{T, T}) = Point(x)
 Point{T <: Integer}(a::T, b::T) = Point((a, b))
 # Memory ordered - n(x-1) + y
@@ -29,7 +29,7 @@ function pointindex{T<:Integer}(index::T)
     x = ceil(Int, index / N)
     y = (index % N)
     if y == 0
-        y = 19
+        y = N
     end
     Point(y, x)
 end
@@ -307,7 +307,7 @@ function get_neighbors(point::Point)
     x = point[1]
     y = point[2]
     result = Vector{Point}()
-    for neighbor in [(UInt8(x - 1), y), (UInt8(x + 1), y), (x, UInt8(y - 1)), (x, UInt8(y + 1))]
+    for neighbor in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
         if onboard(neighbor)
             push!(result, neighbor)
         end
